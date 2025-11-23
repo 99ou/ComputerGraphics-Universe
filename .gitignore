@@ -1,0 +1,22 @@
+# Visual Studio & C++ 필수 무시 목록
+*.exe
+*.dll
+*.lib
+*.obj
+*.o
+*.a
+*.pdb
+*.ilk
+*.exp
+*.map
+.vs/
+Debug/
+Release/
+x64/
+x86/
+build/
+*.suo
+*.user
+*.db
+*.opendb
+*.ipch
