@@ -8,13 +8,13 @@
 // 케플러 궤도 요소
 struct OrbitalElements
 {
-    float semiMajorAxis;          // a
-    float eccentricity;           // e
-    float inclinationDeg;         // i (deg)
-    float ascNodeDeg;             // Ω (deg)
-    float argPeriDeg;             // ω (deg)
-    float periodYears;            // 공전 주기
-    float meanAnomalyAtEpochDeg;  // M0 (deg)
+    float semiMajorAxis;          // 긴반지름 (a)
+    float eccentricity;           // 이심률 (e)
+    float inclinationDeg;         // 경사각 (도)
+    float ascNodeDeg;             // 승교점 경도 Ω (도)
+    float argPeriDeg;             // 근일점 인수 ω (도)
+    float periodYears;            // 공전 주기 (년)
+    float meanAnomalyAtEpochDeg;  // 평균근점이각 M0 (
 
     glm::vec3 positionAtTime(float tYears) const
     {
