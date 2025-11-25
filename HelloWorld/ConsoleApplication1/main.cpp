@@ -123,6 +123,19 @@ void createSphere(unsigned int& vao, unsigned int& indexCount,
 	glBindVertexArray(0);
 }
 
+// 텍스처 로드 및 에러 체크 헬퍼 함수
+unsigned int loadTextureWithCheck(const char* path)
+{
+	unsigned int textureID = loadTexture(path);
+	if (textureID == 0) // loadTexture가 실패하면 보통 0을 반환함
+	{
+		std::cerr << "[ERROR] Texture load failed: " << path << std::endl;
+		// 필요하다면 여기서 프로그램을 강제 종료하거나, 
+		// 핑크색 '에러 텍스처'를 대신 반환하는 로직을 넣을 수도 있음
+	}
+	return textureID;
+}
+
 // 화면 Quad --------------------------------------------------------
 void createQuad(unsigned int& vao, unsigned int& vbo)
 {
@@ -229,7 +242,7 @@ void setupSolarSystem(Sun& sun)
 	// 1) 수성 (Mercury)
 	// radius: 0.25, distance: 12, ecc: 0, orbSpeed: 1.2, spinSpeed: 0.1
 	PlanetParams mercuryP = createPlanetParams(
-		"Mercury", 0.25f, 12.0f, 0.0f, 1.2f, 0.1f, "textures/mercury.jpg"
+		"Mercury", 0.25f, 12.0f, 0.0f, 1.2f, 0.1f, "textures/2k_mercury.jpg"
 	);
 	mercuryP.orbit.argPeriDeg = 29.124f; // 수성의 근일점 편각
 	Planet mercury(mercuryP);
@@ -237,14 +250,14 @@ void setupSolarSystem(Sun& sun)
 	// 2) 금성 (Venus) - 역자전(-0.05)
 	// radius: 0.60, distance: 18, ecc: 0, orbSpeed: 0.9, spinSpeed: -0.05
 	PlanetParams venusP = createPlanetParams(
-		"Venus", 0.60f, 18.0f, 0.0f, 0.9f, -0.05f, "textures/venus.jpg"
-	);
+		"Venus", 0.60f, 18.0f, 0.0f, 0.9f, -0.05f, "textures/2k_venus_atmosphere.jpg"
+	);	
 	Planet venus(venusP);
 	sun.addPlanet(venus); // [1] 등록
 	// 3) 지구 (Earth)
 	// radius: 0.65, distance: 24, ecc: 0, orbSpeed: 0.6, spinSpeed: 1.0
 	PlanetParams earthP = createPlanetParams(
-		"Earth", 0.65f, 24.0f, 0.0f, 0.6f, 1.0f, "textures/earth_day.jpg"
+		"Earth", 0.65f, 24.0f, 0.0f, 0.6f, 1.0f, "textures/2k_earth_daymap.jpg"
 	);
 	// *세부 튜닝이 필요한 경우 여기서 수정
 	earthP.orbit.argPeriDeg = 102.9f;
@@ -268,21 +281,21 @@ void setupSolarSystem(Sun& sun)
 	// 4) 화성 (Mars)
 	// radius: 0.34, distance: 30, ecc: 0, orbSpeed: 0.5, spinSpeed: 0.97
 	PlanetParams marsP = createPlanetParams(
-		"Mars", 0.34f, 30.0f, 0.0f, 0.5f, 0.97f, "textures/mars.jpg"
+		"Mars", 0.34f, 30.0f, 0.0f, 0.5f, 0.97f, "textures/2k_mars.jpg"
 	);
 	Planet mars(marsP);
 	sun.addPlanet(mars); // [3] 등록
 	// 5) 목성 (Jupiter) - 가장 빠른 자전(2.4)
 	// radius: 7.0, distance: 40, ecc: 0, orbSpeed: 0.3, spinSpeed: 2.4
 	PlanetParams jupiterP = createPlanetParams(
-		"Jupiter", 7.0f, 40.0f, 0.0f, 0.3f, 2.4f, "textures/jupiter.jpg"
+		"Jupiter", 7.0f, 40.0f, 0.0f, 0.3f, 2.4f, "textures/2k_jupiter.jpg"
 	);
 	Planet jupiter(jupiterP);
 	sun.addPlanet(jupiter); // [4] 등록
 	// 6) 토성 (Saturn)
 	// radius: 5.8, distance: 50, ecc: 0, orbSpeed: 0.25, spinSpeed: 2.2
 	PlanetParams saturnP = createPlanetParams(
-		"Saturn", 5.8f, 50.0f, 0.0f, 0.25f, 2.2f, "textures/saturn.jpg"
+		"Saturn", 5.8f, 50.0f, 0.0f, 0.25f, 2.2f, "textures/2k_saturn.jpg"
 	);
 	Planet saturn(saturnP);
 	sun.addPlanet(saturn); // [5] 등록
@@ -290,7 +303,7 @@ void setupSolarSystem(Sun& sun)
 	// 7) 천왕성 (Uranus) - 역자전(-1.5)
 	// radius: 2.5, distance: 60, ecc: 0, orbSpeed: 0.18, spinSpeed: -1.5f
 	PlanetParams uranusP = createPlanetParams(
-		"Uranus", 2.5f, 60.0f, 0.0f, 0.18f, -1.5f, "textures/uranus.jpg"
+		"Uranus", 2.5f, 60.0f, 0.0f, 0.18f, -1.5f, "textures/2k_uranus.jpg"
 	);
 	Planet uranus(uranusP);
 	sun.addPlanet(uranus); // [6] 등록
@@ -298,7 +311,7 @@ void setupSolarSystem(Sun& sun)
 	// 8) 해왕성 (Neptune)
 	// radius: 2.4, distance: 70, ecc: 0, orbSpeed: 0.12, spinSpeed: 1.1
 	PlanetParams neptuneP = createPlanetParams(
-		"Neptune", 2.4f, 70.0f, 0.0f, 0.12f, 1.1f, "textures/neptune.jpg"
+		"Neptune", 2.4f, 70.0f, 0.0f, 0.12f, 1.1f, "textures/2k_neptune.jpg"
 	);
 	Planet neptune(neptuneP);
 	sun.addPlanet(neptune); // [7] 등록
@@ -312,6 +325,7 @@ void renderPlanet(Planet& planet,
 	float dtSeconds,
 	float worldScale,
 	const glm::vec3& worldPos,
+	unsigned int sphereVAO,      // VAO 바인딩
 	bool isSun = false,
 	float emissionStrength = 1.0f)
 {
@@ -330,6 +344,7 @@ void renderPlanet(Planet& planet,
 	shader.setMat4("model", model);
 
 	// 실제 그리기
+	glBindVertexArray(sphereVAO);
 	glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 }
 // 행성 위치 업데이트 및 렌더링 좌표 계산 함수
@@ -560,19 +575,25 @@ int main()
 	createQuad(quadVAO, quadVBO);
 
 	// 텍스처 -------------------------------------------------------
-	unsigned int texSun = loadTexture("textures/2k_sun.jpg");
+	// loadTexture -> loadTextureWithCheck로 변경
+
+	unsigned int texSun = loadTextureWithCheck("textures/2k_sun.jpg");
+
 	// 행성
-	unsigned int texMercury = loadTexture("textures/2k_mercury.jpg");
-	unsigned int texVenus = loadTexture("textures/2k_venus_surface.jpg");
-	unsigned int texEarth = loadTexture("textures/2k_earth_daymap.jpg");
-	unsigned int texMars = loadTexture("textures/2k_mars.jpg");
-	unsigned int texJupiter = loadTexture("textures/2k_jupiter.jpg");
-	unsigned int texSaturn = loadTexture("textures/2k_saturn.jpg");
-	unsigned int texUranus = loadTexture("textures/2k_uranus.jpg");
-	unsigned int texNeptune = loadTexture("textures/2k_neptune.jpg");
-	//위성
-	unsigned int texMoon = loadTexture("textures/2k_moon.jpg");
-	unsigned int skyTex = loadTexture("textures/2k_skybox.jpg");
+	unsigned int texMercury = loadTextureWithCheck("textures/2k_mercury.jpg");
+	unsigned int texVenus = loadTextureWithCheck("textures/2k_venus_surface.jpg");
+	unsigned int texEarth = loadTextureWithCheck("textures/2k_earth_daymap.jpg");
+	unsigned int texMars = loadTextureWithCheck("textures/2k_mars.jpg");
+	unsigned int texJupiter = loadTextureWithCheck("textures/2k_jupiter.jpg");
+	unsigned int texSaturn = loadTextureWithCheck("textures/2k_saturn.jpg");
+	unsigned int texUranus = loadTextureWithCheck("textures/2k_uranus.jpg");
+	unsigned int texNeptune = loadTextureWithCheck("textures/2k_neptune.jpg");
+
+	// 위성
+	unsigned int texMoon = loadTextureWithCheck("textures/2k_moon.jpg");
+
+	// Skybox
+	unsigned int skyTex = loadTextureWithCheck("textures/2k_stars_milky_way.jpg");
 
 	// 태양계 -------------------------------------------------------
 	Sun sun;
@@ -713,7 +734,7 @@ int main()
 			glm::vec3 planetWorldPos = updatePlanetPhysics(planet, simYears, SCALE_UNITS);
 
 			// C. 행성 렌더링
-			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos);
+			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos, sphereVAO);
 
 			// D. 위성(달) 처리
 			if (!planet.satellites().empty())
@@ -734,7 +755,6 @@ int main()
 				sceneShader.setInt("diffuseMap", 0);
 				sceneShader.setInt("isSun", 0);
 				sceneShader.setFloat("emissionStrength", 1.0f);
-				glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
 				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos, sphereVAO, sphereIndexCount);
 			}
