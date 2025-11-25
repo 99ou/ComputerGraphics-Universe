@@ -582,6 +582,7 @@ int main()
 	unsigned int hdrFBO;
 	glGenFramebuffers(1, &hdrFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+	
 
 	unsigned int colorBuffers[2];
 	glGenTextures(2, colorBuffers);
@@ -659,8 +660,8 @@ int main()
 			0.1f, 3000.0f);
 
 		// ================================
-	// 1) HDR FBO : 태양 / 지구 / 달 등 모든 천체
-	// ================================
+		// 1) HDR FBO : 태양 / 지구 / 달 등 모든 천체
+		// ================================
 		glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glClearColor(0, 0, 0, 1);
@@ -733,8 +734,9 @@ int main()
 				sceneShader.setInt("diffuseMap", 0);
 				sceneShader.setInt("isSun", 0);
 				sceneShader.setFloat("emissionStrength", 1.0f);
+				glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
-				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos);
+				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos, sphereVAO, sphereIndexCount);
 			}
 			else
 			{

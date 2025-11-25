@@ -78,27 +78,34 @@ void Satellite::drawTrail(const Shader& shader,
     glEnable(GL_DEPTH_TEST);
 }
 
+// 헤더(.h) 파일 선언도 맞춰서 수정해야 합니다: 
+// void drawAtWorld(..., unsigned int sphereVAO, unsigned int indexCount) const;
+
 void Satellite::drawAtWorld(const Shader& shader,
     float dtSec,
     float scale,
-    const glm::vec3& worldPos) const
+    const glm::vec3& worldPos,
+    unsigned int sphereVAO,      // [추가] 어떤 모양을 그릴지 알아야 함
+    unsigned int indexCount)     // [추가] 점이 몇 개인지 알아야 함
+    const // 주의: 멤버변수 spinAngleDeg를 수정하려면 mutable 키워드가 필요하거나 const를 빼야 함
 {
-    spinAngleDeg += params.spinDegPerSec * dtSec;
+    // const 함수에서 멤버 변수 수정 불가하므로, 
+    // 헤더에서 float spinAngleDeg; 를 mutable float spinAngleDeg; 로 바꾸거나
+    // 이 함수의 const를 제거하세요.
+    const_cast<Satellite*>(this)->spinAngleDeg += params.spinDegPerSec * dtSec;
 
     shader.use();
 
     glm::mat4 model(1.0f);
     model = glm::translate(model, worldPos);
-
-    model = glm::rotate(model,
-        glm::radians(spinAngleDeg),
-        glm::vec3(0, 1, 0));
-
-    model = glm::scale(model,
-        glm::vec3(params.radiusRender * scale));
+    model = glm::rotate(model, glm::radians(spinAngleDeg), glm::vec3(0, 1, 0));
+    model = glm::scale(model, glm::vec3(params.radiusRender * scale));
 
     shader.setMat4("model", model);
+    shader.setVec3("objectColor", params.color); // 쉐이더 변수명 확인 필요 (diffuseMap 쓰면 이건 무시될 수도)
 
-    // 텍스처가 planetShader에서 glBindTexture(GL_TEXTURE_2D, textureID)로 먼저 바인드됨
-    shader.setVec3("objectColor", params.color);
+    // [핵심 추가] 실제 그리기 명령
+    glBindVertexArray(sphereVAO);
+    glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
 }

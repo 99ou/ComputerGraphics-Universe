@@ -52,7 +52,10 @@ public:
     void drawAtWorld(const Shader& shader,
         float dtSec,
         float scale,
-        const glm::vec3& worldPos) const;
+        const glm::vec3& worldPos,
+        unsigned int sphereVAO,      // [추가] 어떤 모양을 그릴지 알아야 함
+        unsigned int indexCount)     // [추가] 점이 몇 개인지 알아야 함
+        const;
 
     float getMass() const { return params.mass; }
 
