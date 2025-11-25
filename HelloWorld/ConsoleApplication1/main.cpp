@@ -249,6 +249,21 @@ void setupSolarSystem(Sun& sun)
 	// *세부 튜닝이 필요한 경우 여기서 수정
 	earthP.orbit.argPeriDeg = 102.9f;
 	Planet earth(earthP);
+
+	// 위성 등록은 해당 Sun에 추가하기 전에 해당 행성에 추가하기 
+	// [2] Earth 위성 등록 ====================================================================
+	SatelliteParams moonP = createSatelliteParams(
+		"Moon", 0.18f, 3.0f, 0.0549f, 27.32f / 365.25f, 10.0f, "textures/2k_moon.jpg"
+	);
+	// *달은 궤도 경사각이 중요하므로 추가 설정
+	moonP.orbit.inclinationDeg = 5.145f;
+	moonP.orbit.ascNodeDeg = 125.0f;
+	moonP.orbit.argPeriDeg = 318.0f;
+	Satellite moon(moonP);
+	earth.addSatellite(moon);
+
+	// ------------------------------------------------------------------------------------------
+
 	sun.addPlanet(earth); // [2] 등록
 	// 4) 화성 (Mars)
 	// radius: 0.34, distance: 30, ecc: 0, orbSpeed: 0.5, spinSpeed: 0.97
@@ -287,20 +302,6 @@ void setupSolarSystem(Sun& sun)
 	);
 	Planet neptune(neptuneP);
 	sun.addPlanet(neptune); // [7] 등록
-
-
-	// 위성 ----------------------------------------------------------
-	// // 3-1. Moon
-	SatelliteParams moonP = createSatelliteParams(
-		"Moon", 0.18f, 3.0f, 0.0549f, 27.32f / 365.25f, 10.0f, "textures/moon.jpg"
-	);
-	// *달은 궤도 경사각이 중요하므로 추가 설정
-	moonP.orbit.inclinationDeg = 5.145f;
-	moonP.orbit.ascNodeDeg = 125.0f;
-	moonP.orbit.argPeriDeg = 318.0f;
-
-	Satellite moon(moonP);
-	earth.addSatellite(moon);
 }
 
 // render helper: 한 행성(Planet)을 렌더링
@@ -581,6 +582,7 @@ int main()
 	unsigned int hdrFBO;
 	glGenFramebuffers(1, &hdrFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+	
 
 	unsigned int colorBuffers[2];
 	glGenTextures(2, colorBuffers);
@@ -658,8 +660,8 @@ int main()
 			0.1f, 3000.0f);
 
 		// ================================
-	// 1) HDR FBO : 태양 / 지구 / 달 등 모든 천체
-	// ================================
+		// 1) HDR FBO : 태양 / 지구 / 달 등 모든 천체
+		// ================================
 		glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glClearColor(0, 0, 0, 1);
@@ -732,8 +734,16 @@ int main()
 				sceneShader.setInt("diffuseMap", 0);
 				sceneShader.setInt("isSun", 0);
 				sceneShader.setFloat("emissionStrength", 1.0f);
+				glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
-				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos);
+				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos, sphereVAO, sphereIndexCount);
+			}
+			else
+			{
+				// [문제 확인] 만약 지구(Earth)인데 위성이 없다면 로그 출력!
+				if (pName == "Earth") {
+					std::cout << "[ERROR] Earth has NO satellites! Check setupSolarSystem()." << std::endl;
+				}
 			}
 		}
 
