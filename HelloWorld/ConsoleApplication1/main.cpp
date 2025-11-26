@@ -713,7 +713,7 @@ int main()
 		// 1-2. 모든 행성 순회 및 그리기 -----------------------------
 		// 태양이 관리하는 행성 리스트 가져오기
 		auto& planets = sun.getPlanets();
-
+		float spinSpeedMult = 100.0f;		// 자전 속도 배수 (100배 계왕권!!!!!!!!!!)
 		for (auto& planet : planets)
 		{
 			// A. 텍스처 자동 선택 (이름 기반)
@@ -734,7 +734,7 @@ int main()
 			glm::vec3 planetWorldPos = updatePlanetPhysics(planet, simYears, SCALE_UNITS);
 
 			// C. 행성 렌더링
-			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos, sphereVAO);
+			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt* spinSpeedMult, SCALE_UNITS, planetWorldPos, sphereVAO);
 
 			// D. 위성(달) 처리
 			if (!planet.satellites().empty())
@@ -756,7 +756,7 @@ int main()
 				sceneShader.setInt("isSun", 0);
 				sceneShader.setFloat("emissionStrength", 1.0f);
 
-				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS, moonWorldPos, sphereVAO, sphereIndexCount);
+				moon.drawAtWorld(sceneShader, dt * spinSpeedMult, SCALE_UNITS, moonWorldPos, sphereVAO, sphereIndexCount);
 			}
 			else
 			{
