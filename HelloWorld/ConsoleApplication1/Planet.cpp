@@ -90,6 +90,13 @@ glm::mat4 Planet::buildModelMatrix(float scale,
 
     model = glm::translate(model, worldPos);
 
+    // 2. [추가] 자전축 기울기 적용 (Z축 기준 회전)
+    // 자전(Spin)을 하기 전에 축을 먼저 기울여야, 기울어진 채로 돕니다.
+    if (params.axialTiltDeg != 0.0f)
+    {
+        model = glm::rotate(model, glm::radians(params.axialTiltDeg), glm::vec3(0.0f, 0.0f, 1.0f));
+    }
+
     model = glm::rotate(model,
         glm::radians(spinAngleDeg),
         glm::vec3(0, 1, 0));
