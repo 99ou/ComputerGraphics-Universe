@@ -165,6 +165,41 @@ void createQuad(unsigned int& vao, unsigned int& vbo)
 
 	glBindVertexArray(0);
 }
+// [추가] 토성 고리용 Mesh (3D Scene용) - vec3 pos, vec3 normal, vec2 uv
+void createRingMesh(unsigned int& vao, unsigned int& vbo)
+{
+	float vertices[] = {
+		// Pos (3)             // Normal (3)       // UV (2)
+		-1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+		-1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+
+		-1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+		 1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
+		 1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 1.0f
+	};
+
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+	glBindVertexArray(vao);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+	// layout 0: vec3 (Pos)
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	// layout 1: vec3 (Normal)
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	// layout 2: vec2 (UV)
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+
+	glBindVertexArray(0);
+}
 
 // -------------------------------------------------------------
 // [Helper] 행성 파라미터 생성기
@@ -574,6 +609,9 @@ int main()
 	unsigned int quadVAO, quadVBO;
 	createQuad(quadVAO, quadVBO);
 
+	unsigned int ringVAO, ringVBO;
+	createRingMesh(ringVAO, ringVBO); // 토성 전용 메시 생성
+
 	// 텍스처 -------------------------------------------------------
 	// loadTexture -> loadTextureWithCheck로 변경
 
@@ -594,6 +632,9 @@ int main()
 
 	// Skybox
 	unsigned int skyTex = loadTextureWithCheck("textures/2k_stars_milky_way.jpg");
+
+	// 부가 요소
+	unsigned int texSaturnRing = loadTextureWithCheck("textures/Saturn_ring-removebg.png"); // 토성 고리
 
 	// 태양계 -------------------------------------------------------
 	Sun sun;
@@ -735,7 +776,45 @@ int main()
 
 			// C. 행성 렌더링
 			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt* spinSpeedMult, SCALE_UNITS, planetWorldPos, sphereVAO);
+			// 해성 이름이 "Saturn" 일시 고리 렌더링
+			if (pName == "Saturn") {
+				// 1. 투명도(Alpha Blending) 켜기
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+				// 2. 텍스처 바인딩 (고리)
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, texSaturnRing);
+				sceneShader.setInt("diffuseMap", 0);
+				sceneShader.setInt("isSun", 0); // 고리는 빛나지 않음
+				sceneShader.setFloat("emissionStrength", 1.0f);
+
+				// 3. 모델 행렬 계산 (위치 -> 회전 -> 크기)
+				glm::mat4 ringModel = glm::mat4(1.0f);
+
+				// (1) 위치: 토성 위치로 이동
+				ringModel = glm::translate(ringModel, planetWorldPos);
+
+				// (2) 회전: 고리를 눕히기 위해 X축 90도 회전
+				//     + 자전축 기울기(Axial Tilt)가 있다면 여기서 같이 적용
+				ringModel = glm::rotate(ringModel, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+				// (3) 크기: 토성 본체보다 커야 함 (예: 1.5배 ~ 2.5배)
+				// 토성의 반지름을 가져와서 비례식으로 키움
+				float ringScale = planet.getParams().radiusRender * 2.2f;
+				ringModel = glm::scale(ringModel, glm::vec3(SCALE_UNITS * ringScale));
+
+				sceneShader.setMat4("model", ringModel);
+
+				// 4. 사각형(Quad) 그리기
+				// createQuad로 만든 quadVAO를 사용합니다.
+				glBindVertexArray(ringVAO);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+				glBindVertexArray(0);
+
+				// 5. 투명도 끄기 (다른 물체에 영향 안 주게)
+				glDisable(GL_BLEND);
+			}
 			// D. 위성(달) 처리
 			if (!planet.satellites().empty())
 			{
