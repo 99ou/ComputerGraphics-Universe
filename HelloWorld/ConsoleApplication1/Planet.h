@@ -23,6 +23,8 @@ struct PlanetParams
     float spinDegPerSec;   // 자전 속도
 
     std::string texturePath; // 🔥 행성 텍스처 경로 (jpg)
+
+    float axialTiltDeg = 0.0f; // 자전축 기울기
 };
 
 class Planet
