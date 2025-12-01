@@ -22,6 +22,11 @@ unsigned int SCR_HEIGHT = 720;
 Camera* gCamera = nullptr;
 const float SCALE_UNITS = 1.0f;
 
+// 현재 추적 중인 행성의 인덱스: -1 (NONE)
+int trackingIndex = -1;
+// 게임 일시 정지 플래그
+bool isPaused = false;
+
 
 // ========================
 // XZ 평면 정렬 행렬 정의
@@ -865,7 +870,41 @@ int main()
 		bool d = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
 		cam.processKeyboard(w, s, a, d, dt);
 
-		simYears += dt * SIM_SPEED;
+		// 행성 추적 ------------------------------------------------
+		// [추가] 추적 대상 선택 (숫자키 1 ~ 8)
+		if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) trackingIndex = 0; // 수성
+		if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) trackingIndex = 1; // 금성
+		if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) trackingIndex = 2; // 지구
+		if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) trackingIndex = 3; // 화성
+		if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) trackingIndex = 4; // 목성
+		if (glfwGetKey(window, GLFW_KEY_6) == GLFW_PRESS) trackingIndex = 5; // 토성
+		if (glfwGetKey(window, GLFW_KEY_7) == GLFW_PRESS) trackingIndex = 6; // 천왕성
+		if (glfwGetKey(window, GLFW_KEY_8) == GLFW_PRESS) trackingIndex = 7; // 해왕성
+
+		// [추가] 추적 해제 (ESC)
+		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+		{
+			trackingIndex = -1;
+			gCamera->stopTracking();
+		}
+		static bool zeroKeyPressed = false; // 이전 프레임 키 상태 저장
+		if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS)
+		{
+			if (!zeroKeyPressed) // 방금 눌리기 시작했다면
+			{
+				isPaused = !isPaused; // 상태 반전 (On <-> Off)
+				std::cout << "Simulation " << (isPaused ? "PAUSED" : "RESUMED") << std::endl;
+				zeroKeyPressed = true;
+			}
+		}
+		else
+		{
+			zeroKeyPressed = false; // 키를 떼면 리셋
+		}
+
+		if (!isPaused) {
+			simYears += dt * SIM_SPEED;
+		}
 
 		glm::mat4 view = cam.getViewMatrix();
 		glm::mat4 proj = glm::perspective(glm::radians(cam.getFOV()),
@@ -921,6 +960,8 @@ int main()
 		planetWorldPositions.clear();                 
 		planetWorldPositions.reserve(planets.size());
 
+		int pIdx = 0; // 행성 인덱스 카운터
+
 		for (auto& planet : planets)
 		{
 			// A. 텍스처 자동 선택 (이름 기반)
@@ -942,6 +983,20 @@ int main()
 
 			// 행성 world 좌표를 저장
 			planetWorldPositions.push_back(planetWorldPos);
+			// ==========================================
+			// [추가] 카메라 추적 로직 (핵심!)
+			// ==========================================
+
+			if (trackingIndex == pIdx)
+			{
+				// 1. 현재 추적 모드가 꺼져있다면 -> 켜기
+				if (!gCamera->getIsTracking()) {
+					gCamera->startTracking(planetWorldPos);
+				}
+				// 2. 매 프레임 행성의 새로운 위치를 카메라에 전달
+				gCamera->updateTargetPosition(planetWorldPos);
+			}
+			// ==========================================
 
 			// C. 행성 렌더링
 			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos, sphereVAO);
@@ -1023,6 +1078,8 @@ int main()
 					std::cout << "[ERROR] Earth has NO satellites! Check setupSolarSystem()." << std::endl;
 				}
 			}
+			// [추가] 루프 끝날 때 인덱스 증가
+			pIdx++;
 		}
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
