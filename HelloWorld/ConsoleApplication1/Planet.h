@@ -14,17 +14,14 @@ struct PlanetParams
 {
     std::string name;
 
-    float mass;            // 태양 대비 질량 비율
-    float radiusRender;    // 렌더링시 표시할 실제 반지름
-    glm::vec3 color;       // 필요 시 보조 색상
+    float mass;
+    float radiusRender;
+    glm::vec3 color;
 
-    OrbitalElements orbit; // 태양 기준 공전 궤도
+    OrbitalElements orbit;
+    float spinDegPerSec;
 
-    float spinDegPerSec;   // 자전 속도
-
-    std::string texturePath; // 🔥 행성 텍스처 경로 (jpg)
-
-    float axialTiltDeg = 0.0f; // 자전축 기울기
+    std::string texturePath;
 };
 
 class Planet
@@ -35,27 +32,24 @@ public:
     const PlanetParams& getParams() const { return params; }
 
     void addSatellite(const Satellite& s);
-
     std::vector<Satellite>& satellites() { return sats; }
     const std::vector<Satellite>& satellites() const { return sats; }
 
     float getMass() const { return params.mass; }
 
-    // 태양 기준 위치 (tYears: 시뮬레이션 시간)
     glm::vec3 positionAroundSun(float tYears) const;
 
-    // 행성 trail 기록
-    void recordTrail(const glm::vec3& heliocentricPos);
+    // 진행도 (0~1)
+    float orbitProgress(float tYears) const;
 
-    // trail 렌더
+    // 흰색 전체 궤도 + 초록색 진행 궤도
     void drawTrail(const Shader& shader,
         const glm::mat4& view,
-        const glm::mat4& proj) const;
+        const glm::mat4& proj,
+        float tYears) const;
 
-    // 자전
     void advanceSpin(float dtSec) const;
 
-    // 행성 렌더링을 위한 model matrix 생성
     glm::mat4 buildModelMatrix(float scale,
         const glm::vec3& worldPos) const;
 
@@ -65,8 +59,9 @@ private:
 
     mutable float spinAngleDeg;
 
-    std::vector<glm::vec3> trail;  // 태양 기준 궤적
-    int maxTrailPoints;
+    // orbitPath 캐시
+    mutable bool generatedOrbit = false;
+    mutable std::vector<glm::vec3> orbitPath;
 };
 
 #endif

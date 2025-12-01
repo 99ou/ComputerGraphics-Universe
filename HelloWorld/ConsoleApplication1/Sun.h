@@ -2,6 +2,9 @@
 #define SUN_H
 
 #include <vector>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include "Planet.h"
 
 class Sun
@@ -16,9 +19,21 @@ public:
 
     float getMass() const { return mass; }
 
+    // ⭐ 자전 업데이트
+    void advanceSpin(float dtSec) const;
+
+    // ⭐ 태양 렌더링용 model matrix 생성
+    glm::mat4 buildModelMatrix(float scale) const;
+
+    // ⭐ 태양 자전 속도 설정
+    void setSpinSpeed(float degPerSec) { spinDegPerSec = degPerSec; }
+
 private:
-    float mass;                  // 태양 질량 (기본 = 1.0)
-    std::vector<Planet> planets; // 태양계의 행성들
+    float mass;                    // 태양 질량
+    std::vector<Planet> planets;
+
+    mutable float spinAngleDeg;    // ⭐ 누적 자전 각도
+    float spinDegPerSec;           // ⭐ 초당 회전 속도 (deg/sec)
 };
 
 #endif
