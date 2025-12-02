@@ -225,7 +225,8 @@ PlanetParams createPlanetParams(std::string name,
 	float eccentricity,
 	float period,
 	float spinSpeed,
-	std::string texPath)
+	std::string texPath,
+	float ax = 0.0f)
 {
 	PlanetParams p;
 	p.name = name;
@@ -246,6 +247,7 @@ PlanetParams createPlanetParams(std::string name,
 
 	p.spinDegPerSec = spinSpeed;
 	p.texturePath = texPath;
+	p.axialTiltDeg = ax;
 
 	return p;
 }
@@ -420,8 +422,30 @@ void setupSolarSystem(Sun& sun)
 	jupiterP.orbit.meanAnomalyAtEpochDeg = 20.0202f;	// 평균근점이각 M₀
 	jupiterP.orbit.periodYears = 11.862615f;	  // 실제 공전주기
 
+
+
 	// 객체 생성 + 태양에 등록
 	Planet jupiter(jupiterP);
+	// 2. 목성 위성 유로파 (Europa)
+	// 반지름: 0.15, 거리: 9.0 (목성 표면 위), 이심률: 0.009 (실제값), 공전속도: 6.0
+	SatelliteParams europaP = createSatelliteParams(
+		"Europa",
+		0.15f,
+		9.0f,
+		0.009f, // 실제 유로파 이심률 (거의 원)
+		0.08f,
+		5.0f,
+		"textures/europa.jpg"
+	);
+
+	// [유로파 궤도 요소 디테일 설정]
+	// 유로파는 목성 적도면 기준 약 0.47도 기울어져 있습니다. (거의 수평)
+	europaP.orbit.inclinationDeg = 0.47f;  // 궤도 경사각
+	europaP.orbit.ascNodeDeg = 219.0f;     // 승교점 경도 (임의의 기준값)
+	europaP.orbit.argPeriDeg = 15.0f;      // 근일점 편각 (임의의 기준값)
+
+	Satellite europa(europaP);
+	jupiter.addSatellite(europa); // 목성에 추가
 	sun.addPlanet(jupiter);   // [4] 등록
 
 	// --------------------------------------------------------------------
@@ -445,6 +469,23 @@ void setupSolarSystem(Sun& sun)
 
 	// 객체 생성 + 태양에 추가
 	Planet saturn(saturnP);
+
+	// 토성 위성 타이탄 (Titan)
+	SatelliteParams titanP = createSatelliteParams(
+		"Titan",
+		0.25f,   // 반지름: 달보다 좀 큼
+		15.0f,   // 거리: 고리에 안 닿게 멀리 배치 (토성 반지름이 5.8임)
+		0.028f,  // 이심률
+		0.13f,    // 공전 속도
+		2.0f,    // 자전 속도
+		"textures/2k_titan.jpg"
+	);
+	// 타이탄도 궤도가 살짝 기울어져 있음 (약 0.3도)
+	titanP.orbit.inclinationDeg = 0.348f;
+
+	Satellite titan(titanP);
+	saturn.addSatellite(titan); // 토성에 추가
+
 	sun.addPlanet(saturn);   // [5] 등록
 
 	// --------------------------------------------------------------------
@@ -456,7 +497,8 @@ void setupSolarSystem(Sun& sun)
 		0.0472f,             // 이심률 (실제 값)
 		0.15f,               // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
 		-1.4f,               // 자전속도 (천왕성은 '거의 90도 눕는' 극단적인 역자전 → 음수로 표현)
-		"textures/2k_uranus.jpg"
+		"textures/2k_uranus.jpg",
+		98.0f
 	);
 
 	// 천왕성 실제 궤도 요소 (NASA JPL Elements)
@@ -492,6 +534,28 @@ void setupSolarSystem(Sun& sun)
 	// 객체 생성 + 태양 등록
 	Planet neptune(neptuneP);
 	sun.addPlanet(neptune);   // [7] 등록
+
+	// ---------------------------------------------------------
+	// 9. 아스가르드 (Asgard) - 수직 궤도 행성
+	// ---------------------------------------------------------
+	PlanetParams asgardP = createPlanetParams(
+		"Asgard",
+		1.5f,   // 크기: 지구보다 좀 큼
+		45.0f,  // 거리: 목성(40)과 토성(50) 사이를 가로지름
+		0.0f,   // 이심률
+		2.0f,   // 공전 속도: 꽤 빠름
+		5.0f,   // 자전 속도
+		"textures/2k_moon.jpg" // 텍스처 (없으면 달 텍스처 재활용)
+	);
+
+	// [핵심] 궤도 경사각을 90도로 설정 (수직 공전)
+	asgardP.orbit.inclinationDeg = 90.0f;
+
+	// (선택) 궤도 교차 지점 설정 (0도면 X축에서 교차, 90도면 Z축에서 교차)
+	asgardP.orbit.ascNodeDeg = 45.0f;
+
+	Planet asgard(asgardP);
+	sun.addPlanet(asgard); // 태양계 등록
 }
 
 // render helper: 한 행성(Planet)을 렌더링
@@ -523,6 +587,56 @@ void renderPlanet(Planet& planet,
 	// 실제 그리기
 	glBindVertexArray(sphereVAO);
 	glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+}
+
+void renderSatellites(Planet& planet,
+	Shader& shader,
+	float dt,
+	float simTime,
+	float scale,
+	unsigned int sphereVAO,
+	unsigned int indexCount,
+	glm::vec3 planetWorldPos, // [추가] 이미 회전 적용된 행성 위치
+	// 사용할 위성 텍스처들을 인자로 다 받거나, 전역 변수라면 생략 가능
+	unsigned int texMoon,
+	unsigned int texEuropa,
+	unsigned int texTitan)
+{
+	// 위성이 없으면 바로 리턴
+	if (planet.satellites().empty()) return;
+
+	// 행성의 현재 위치 (위성의 기준점)
+	glm::vec3 pPos = planet.positionAroundSun(simTime) * scale; // updatePlanetPhysics와 동일 계산 필요
+
+	// 모든 위성 순회
+	for (auto& sat : planet.satellites())
+	{
+		std::string sName = sat.getParams().name;
+		unsigned int currentTex = texMoon; // 기본값: 달 텍스처
+
+		// 1. 이름에 따라 텍스처 자동 선택
+		if (sName == "Moon")        currentTex = texMoon;
+		else if (sName == "Europa") currentTex = texEuropa;
+		else if (sName == "Titan")  currentTex = texTitan; // [추가]
+		// else currentTex = texGenericRock; // 나머지 돌덩이들
+
+		// 2. 텍스처 바인딩
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, currentTex);
+		shader.setInt("diffuseMap", 0);
+		shader.setInt("isSun", 0);
+		shader.setFloat("emissionStrength", 1.0f);
+
+		// 3. 위치 계산
+		glm::vec3 rel = sat.positionRelativeToPlanet(simTime);
+		// 2. [핵심 수정] 상대 위치도 orbitToXZ로 회전시켜야 함 (XY -> XZ)
+		// orbitToXZ는 전역 변수이므로 바로 사용 가능
+		glm::vec3 relXZ = glm::vec3(orbitToXZ * glm::vec4(rel, 1.0f));
+		glm::vec3 satWorldPos = pPos + (rel * scale);
+
+		// 4. 그리기
+		sat.drawAtWorld(shader, dt, scale, satWorldPos, sphereVAO, indexCount);
+	}
 }
 
 // 행성 위치 업데이트 및 렌더링 좌표 계산 함수
@@ -781,15 +895,19 @@ int main()
 	unsigned int texSaturn = loadTextureWithCheck("textures/2k_saturn.jpg");
 	unsigned int texUranus = loadTextureWithCheck("textures/2k_uranus.jpg");
 	unsigned int texNeptune = loadTextureWithCheck("textures/2k_neptune.jpg");
+	unsigned int texAsgard = loadTextureWithCheck("textures/2k_neptune.jpg");
 
 	// 위성
 	unsigned int texMoon = loadTextureWithCheck("textures/2k_moon.jpg");
+	unsigned int texEuropa = loadTextureWithCheck("textures/2k_moon.jpg");
+	unsigned int texTitan = loadTextureWithCheck("textures/2k_moon.jpg");
 
 	// Skybox
 	unsigned int skyTex = loadTextureWithCheck("textures/2k_stars_milky_way.jpg");
 
 	// 부가 요소
 	unsigned int texSaturnRing = loadTextureWithCheck("textures/Saturn_ring-removebg.png"); // 토성 고리
+	unsigned int texUranusRing = loadTextureWithCheck("textures/2k_Uranus_ring.png"); // 천왕성 고리
 
 	// 태양계 -------------------------------------------------------
 	Sun sun;
@@ -880,6 +998,7 @@ int main()
 		if (glfwGetKey(window, GLFW_KEY_6) == GLFW_PRESS) trackingIndex = 5; // 토성
 		if (glfwGetKey(window, GLFW_KEY_7) == GLFW_PRESS) trackingIndex = 6; // 천왕성
 		if (glfwGetKey(window, GLFW_KEY_8) == GLFW_PRESS) trackingIndex = 7; // 해왕성
+		if (glfwGetKey(window, GLFW_KEY_9) == GLFW_PRESS) trackingIndex = 8; // 아스가르드
 
 		// [추가] 추적 해제 (ESC)
 		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -976,6 +1095,7 @@ int main()
 			else if (pName == "Saturn")  currentTex = texSaturn;
 			else if (pName == "Uranus")  currentTex = texUranus;
 			else if (pName == "Neptune") currentTex = texNeptune;
+			else if (pName == "Asgard") currentTex = texAsgard;
 
 			// B. 물리 업데이트 및 위치 계산 (Helper 함수 사용)
 			// 이 함수 내부에서 recordTrail()도 호출됨
@@ -1000,6 +1120,15 @@ int main()
 
 			// C. 행성 렌더링
 			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos, sphereVAO);
+			// 행성별 위성 렌더링
+			// (texTitan, texEuropa 등은 로드해서 변수로 넘겨주어야 함. 없으면 texMoon만 넣어도 됨)
+			renderSatellites(planet, sceneShader,
+				dt, simYears, SCALE_UNITS,
+				sphereVAO, sphereIndexCount,
+				planetWorldPos,
+				texMoon,
+				texEuropa,
+				texTitan);
 			// 해성 이름이 "Saturn" 일시 고리 렌더링
 			if (pName == "Saturn") {
 				// 1. 투명도(Alpha Blending) 켜기
@@ -1039,44 +1168,50 @@ int main()
 				// 5. 투명도 끄기 (다른 물체에 영향 안 주게)
 				glDisable(GL_BLEND);
 			}
-			// ============================
-			// D. 위성 (달) 렌더링
-			// ============================
-			if (!planet.satellites().empty())
+			// 천왕성 고리 추가
+			else if (pName == "Uranus")
+
 			{
-				Satellite& moon = planet.satellites()[0];
-
-				// 상대 위치 (XY 기준)
-				glm::vec3 rel = moon.positionRelativeToPlanet(simYears);
-
-				// XZ 평면 정렬 적용
-				glm::vec3 relXZ =
-					glm::vec3(orbitToXZ * glm::vec4(rel, 1.0f));
-
-				// 달 월드 위치
-				glm::vec3 moonWorldPos =
-					planetWorldPos + relXZ * SCALE_UNITS;
-
-				// trail 기록 (월드좌표로만!)
-				//moon.recordTrail(relXZ);
-
-				// 달 렌더링
+				// 1. 투명도 켜기
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				// 2. 텍스처 바인딩 (천왕성 고리)
 				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, texMoon);
+				glBindTexture(GL_TEXTURE_2D, texUranusRing); // 로드한 변수명
 				sceneShader.setInt("diffuseMap", 0);
 				sceneShader.setInt("isSun", 0);
 				sceneShader.setFloat("emissionStrength", 1.0f);
 
-				moon.drawAtWorld(sceneShader, dt, SCALE_UNITS,
-					moonWorldPos,
-					sphereVAO, sphereIndexCount);
-			}
-			else
-			{
-				// [문제 확인] 만약 지구(Earth)인데 위성이 없다면 로그 출력!
-				if (pName == "Earth") {
-					std::cout << "[ERROR] Earth has NO satellites! Check setupSolarSystem()." << std::endl;
+				// 3. 모델 행렬 계산
+				glm::mat4 ringModel = glm::mat4(1.0f);
+
+				// (1) 위치: 천왕성 위치로 이동
+				ringModel = glm::translate(ringModel, planetWorldPos);
+				float tilt = planet.getParams().axialTiltDeg;
+				if (tilt != 0.0f) {
+					// Z축을 기준으로 98도 회전 (세로로 세움)
+					ringModel = glm::rotate(ringModel, glm::radians(tilt), glm::vec3(0.0f, 0.0f, 1.0f));
 				}
+				// (3) 기하 정렬 (X축 90도 회전)
+				// quadVAO는 기본적으로 '벽(XY평면)'처럼 서 있습니다.
+				// 이를 행성의 '적도면'에 맞추기 위해 90도 눕혀줍니다.
+				// (위에서 이미 축을 기울였으므로, '기울어진 적도'에 맞춰 눕게 됩니다)
+				ringModel = glm::rotate(ringModel, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+				// (4) 크기: 천왕성 고리는 본체 대비 꽤 넓습니다.
+				float ringScale = planet.getParams().radiusRender * 2.0f;
+				ringModel = glm::scale(ringModel, glm::vec3(SCALE_UNITS * ringScale));
+
+				sceneShader.setMat4("model", ringModel);
+
+				// 4. 그리기 (ringVAO 사용)
+				// *주의: 토성 때 만든 ringVAO(createRingMesh로 만든 것)를 재사용합니다.
+				glBindVertexArray(ringVAO);
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+				glBindVertexArray(0);
+
+				// 5. 투명도 끄기
+				glDisable(GL_BLEND);
 			}
 			// [추가] 루프 끝날 때 인덱스 증가
 			pIdx++;

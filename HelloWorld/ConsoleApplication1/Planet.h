@@ -22,6 +22,7 @@ struct PlanetParams
     float spinDegPerSec;
 
     std::string texturePath;
+    float axialTiltDeg = 0.0f; // 자전축 기울기
 };
 
 class Planet
