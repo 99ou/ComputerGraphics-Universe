@@ -19,24 +19,24 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="Physics.cpp" />
-    <ClCompile Include="Planet.cpp" />
-    <ClCompile Include="Satellite.cpp" />
-    <ClCompile Include="Shader.cpp" />
-    <ClCompile Include="Sun.cpp" />
-    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Camera.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\main.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Physics.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Planet.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Satellite.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Shader.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Sun.cpp" />
+    <ClCompile Include="..\..\..\2025_SolarSystem\SolarSystem\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Camera.h" />
-    <ClInclude Include="Orbit.h" />
-    <ClInclude Include="Physics.h" />
-    <ClInclude Include="Planet.h" />
-    <ClInclude Include="Satellite.h" />
-    <ClInclude Include="Shader.h" />
-    <ClInclude Include="Sun.h" />
-    <ClInclude Include="Texture.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Camera.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Orbit.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Physics.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Planet.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Satellite.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Shader.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Sun.h" />
+    <ClInclude Include="..\..\..\2025_SolarSystem\SolarSystem\Texture.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
