@@ -1,10 +1,10 @@
-#ifndef TEXTURE_H
+ï»¿#ifndef TEXTURE_H
 #define TEXTURE_H
 
 #include <string>
 
-// JPG / PNG ÅØ½ºÃ³ ·Î´õ
-// ¹İÈ¯°ª: OpenGL texture ID
+// JPG / PNG í…ìŠ¤ì²˜ ë¡œë”
+// ë°˜í™˜ê°’: OpenGL texture ID
 unsigned int loadTexture(const std::string& path);
 
 #endif

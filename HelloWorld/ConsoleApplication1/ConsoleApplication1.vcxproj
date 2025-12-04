@@ -23,6 +23,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Physics.cpp" />
     <ClCompile Include="Planet.cpp" />
+    <ClCompile Include="planetRing.cpp" />
     <ClCompile Include="Satellite.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Sun.cpp" />
@@ -33,6 +34,7 @@
     <ClInclude Include="Orbit.h" />
     <ClInclude Include="Physics.h" />
     <ClInclude Include="Planet.h" />
+    <ClInclude Include="planetRing.h" />
     <ClInclude Include="Satellite.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="Sun.h" />

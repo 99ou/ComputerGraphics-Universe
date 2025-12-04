@@ -39,6 +39,9 @@
     <ClCompile Include="Texture.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="planetRing.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h">
@@ -63,6 +66,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Texture.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="planetRing.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
