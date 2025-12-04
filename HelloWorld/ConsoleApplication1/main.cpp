@@ -8,6 +8,10 @@
 #include <iostream>
 #include <vector>
 
+#include <iomanip>
+#include <sstream>
+#include <string>
+
 #include "Camera.h"
 #include "Shader.h"
 #include "Texture.h"
@@ -19,6 +23,8 @@
 unsigned int SCR_WIDTH = 1280;
 unsigned int SCR_HEIGHT = 720;
 
+float simSpeedMultiplier = 1.0f;   // 시뮬레이션 배속 (0.5x ~ 10x) ?
+
 Camera* gCamera = nullptr;
 const float SCALE_UNITS = 1.0f;
 
@@ -26,7 +32,6 @@ const float SCALE_UNITS = 1.0f;
 int trackingIndex = -1;
 // 게임 일시 정지 플래그
 bool isPaused = false;
-
 
 // ========================
 // XZ 평면 정렬 행렬 정의
@@ -596,17 +601,13 @@ void renderSatellites(Planet& planet,
 	float scale,
 	unsigned int sphereVAO,
 	unsigned int indexCount,
-	glm::vec3 planetWorldPos, // [추가] 이미 회전 적용된 행성 위치
-	// 사용할 위성 텍스처들을 인자로 다 받거나, 전역 변수라면 생략 가능
+	glm::vec3 planetWorldPos, // 이미 회전(XZ) + 스케일 + 질량중심 보정이 적용된 행성 위치
 	unsigned int texMoon,
 	unsigned int texEuropa,
 	unsigned int texTitan)
 {
 	// 위성이 없으면 바로 리턴
 	if (planet.satellites().empty()) return;
-
-	// 행성의 현재 위치 (위성의 기준점)
-	glm::vec3 pPos = planet.positionAroundSun(simTime) * scale; // updatePlanetPhysics와 동일 계산 필요
 
 	// 모든 위성 순회
 	for (auto& sat : planet.satellites())
@@ -617,8 +618,8 @@ void renderSatellites(Planet& planet,
 		// 1. 이름에 따라 텍스처 자동 선택
 		if (sName == "Moon")        currentTex = texMoon;
 		else if (sName == "Europa") currentTex = texEuropa;
-		else if (sName == "Titan")  currentTex = texTitan; // [추가]
-		// else currentTex = texGenericRock; // 나머지 돌덩이들
+		else if (sName == "Titan")  currentTex = texTitan;
+		// else currentTex = texGenericRock; // 필요 시 일반 위성 텍스처
 
 		// 2. 텍스처 바인딩
 		glActiveTexture(GL_TEXTURE0);
@@ -627,14 +628,16 @@ void renderSatellites(Planet& planet,
 		shader.setInt("isSun", 0);
 		shader.setFloat("emissionStrength", 1.0f);
 
-		// 3. 위치 계산
-		glm::vec3 rel = sat.positionRelativeToPlanet(simTime);
-		// 2. [핵심 수정] 상대 위치도 orbitToXZ로 회전시켜야 함 (XY -> XZ)
-		// orbitToXZ는 전역 변수이므로 바로 사용 가능
-		glm::vec3 relXZ = glm::vec3(orbitToXZ * glm::vec4(rel, 1.0f));
-		glm::vec3 satWorldPos = pPos + (rel * scale);
+		// 3. 상대 위치 계산 (모든 궤도는 XY → XZ로 회전해서 사용)
+		glm::vec3 rel = sat.positionRelativeToPlanet(simTime);                 // XY 기준
+		glm::vec3 relXZ = glm::vec3(orbitToXZ * glm::vec4(rel, 1.0f));         // XZ 기준으로 회전
 
-		// 4. 그리기
+		// 4. 최종 world 위치
+		// planetWorldPos는 이미 (physPos + Re) * scale 에 orbitToXZ를 적용한 값
+		// relXZ는 시뮬레이션 단위이므로 scale을 곱해서 같은 단위로 맞춘다.
+		glm::vec3 satWorldPos = planetWorldPos + relXZ * scale;
+
+		// 5. 그리기
 		sat.drawAtWorld(shader, dt, scale, satWorldPos, sphereVAO, indexCount);
 	}
 }
@@ -988,6 +991,27 @@ int main()
 		bool d = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
 		cam.processKeyboard(w, s, a, d, dt);
 
+		// ===========================
+		// Simulation Speed Control
+		// Shift = speed up
+		// Ctrl  = slow down
+		// ===========================
+		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+			glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+		{
+			simSpeedMultiplier += dt * 2.0f;
+			if (simSpeedMultiplier > 10.0f)
+				simSpeedMultiplier = 10.0f;
+		}
+
+		if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+			glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)
+		{
+			simSpeedMultiplier -= dt * 2.0f;
+			if (simSpeedMultiplier < 0.5f)
+				simSpeedMultiplier = 0.5f;
+		}
+
 		// 행성 추적 ------------------------------------------------
 		// [추가] 추적 대상 선택 (숫자키 1 ~ 8)
 		if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) trackingIndex = 0; // 수성
@@ -1022,7 +1046,7 @@ int main()
 		}
 
 		if (!isPaused) {
-			simYears += dt * SIM_SPEED;
+			simYears += dt * SIM_SPEED * simSpeedMultiplier;
 		}
 
 		glm::mat4 view = cam.getViewMatrix();
@@ -1312,6 +1336,16 @@ int main()
 			}
 
 			planetIdx++;
+		}
+
+		// ===========================
+		// Update Window Title (Show Speed)
+		// ===========================
+		{
+			std::stringstream ss;
+			ss << "Speed : x " << std::fixed << std::setprecision(1) << simSpeedMultiplier;
+
+			glfwSetWindowTitle(window, ss.str().c_str());
 		}
 
 		glfwSwapBuffers(window);
