@@ -1,6 +1,10 @@
 # ComputerGraphics-Universe
 안양대학교 3학년 컴퓨터그래픽스 수업 은하계 만들기 과제
 
+## 2025.12.05 프로젝트 완료
+
+<img width="1276" height="749" alt="image" src="https://github.com/user-attachments/assets/7886e268-80ca-4890-94c5-bb9fec3c8e8d" />
+
 ---
 
 # OpenGL Solar System Simulation
