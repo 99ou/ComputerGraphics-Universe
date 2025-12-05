@@ -19,6 +19,7 @@
 #include "Planet.h"
 #include "Satellite.h"
 #include "Orbit.h"
+#include "planetRing.h"
 
 unsigned int SCR_WIDTH = 1280;
 unsigned int SCR_HEIGHT = 720;
@@ -32,6 +33,8 @@ const float SCALE_UNITS = 1.0f;
 int trackingIndex = -1;
 // 게임 일시 정지 플래그
 bool isPaused = false;
+
+float gTimeYears = 0.0f; // 시뮬레이션 경과 시간 (년 단위)
 
 // ========================
 // XZ 평면 정렬 행렬 정의
@@ -49,19 +52,21 @@ void framebuffer_size_callback(GLFWwindow* window, int w, int h)
 	glViewport(0, 0, w, h);
 }
 
+// 키보드 입력 콜백
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
 	if (gCamera)
 		gCamera->processMouseMovement((float)xpos, (float)ypos);
 }
 
+// 마우스 휠 콜백
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
 	if (gCamera)
 		gCamera->processMouseScroll((float)yoffset);
 }
 
-// 구 + UV ----------------------------------------------------------
+// 구 + UV 
 void createSphere(unsigned int& vao, unsigned int& indexCount,
 	int stacks = 40, int slices = 40)
 {
@@ -142,6 +147,46 @@ void createSphere(unsigned int& vao, unsigned int& indexCount,
 	glBindVertexArray(0);
 }
 
+// 화면 전체를 덮는 풀스크린 Quad 생성 (블룸/합성용)
+void createQuad(unsigned int& vao, unsigned int& vbo)
+{
+	//   위치 (x,y)   //   텍스처 좌표 (u,v)
+	float quadVertices[] = {
+		// 1번 삼각형
+		-1.0f, -1.0f,  0.0f, 0.0f,
+		 1.0f, -1.0f,  1.0f, 0.0f,
+		-1.0f,  1.0f,  0.0f, 1.0f,
+		// 2번 삼각형
+		-1.0f,  1.0f,  0.0f, 1.0f,
+		 1.0f, -1.0f,  1.0f, 0.0f,
+		 1.0f,  1.0f,  1.0f, 1.0f
+	};
+
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(1, &vbo);
+
+	glBindVertexArray(vao);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(quadVertices),
+		quadVertices,
+		GL_STATIC_DRAW);
+
+	// layout(location=0) vec2 aPos;
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE,
+		4 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	// layout(location=1) vec2 aTex;
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,
+		4 * sizeof(float), (void*)(2 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	glBindVertexArray(0);
+}
+
+
 // 텍스처 로드 및 에러 체크 헬퍼 함수
 unsigned int loadTextureWithCheck(const char* path)
 {
@@ -153,71 +198,6 @@ unsigned int loadTextureWithCheck(const char* path)
 		// 핑크색 '에러 텍스처'를 대신 반환하는 로직을 넣을 수도 있음
 	}
 	return textureID;
-}
-
-// 화면 Quad --------------------------------------------------------
-void createQuad(unsigned int& vao, unsigned int& vbo)
-{
-	float quadVertices[] = {
-		// pos   // uv
-		-1.f,  1.f, 0.f, 1.f,
-		-1.f, -1.f, 0.f, 0.f,
-		 1.f, -1.f, 1.f, 0.f,
-
-		-1.f,  1.f, 0.f, 1.f,
-		 1.f, -1.f, 1.f, 0.f,
-		 1.f,  1.f, 1.f, 1.f
-	};
-
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	glBindVertexArray(vao);
-
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	glBindVertexArray(0);
-}
-// [추가] 토성 고리용 Mesh (3D Scene용) - vec3 pos, vec3 normal, vec2 uv
-void createRingMesh(unsigned int& vao, unsigned int& vbo)
-{
-	float vertices[] = {
-		// Pos (3)             // Normal (3)       // UV (2)
-		-1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-		-1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
-		 1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
-
-		-1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-		 1.0f, -1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 0.0f,
-		 1.0f,  1.0f, 0.0f,    0.0f, 1.0f, 0.0f,   1.0f, 1.0f
-	};
-
-	glGenVertexArrays(1, &vao);
-	glGenBuffers(1, &vbo);
-	glBindVertexArray(vao);
-
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	// layout 0: vec3 (Pos)
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	// layout 1: vec3 (Normal)
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	// layout 2: vec2 (UV)
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
-
-	glBindVertexArray(0);
 }
 
 // -------------------------------------------------------------
@@ -290,255 +270,441 @@ SatelliteParams createSatelliteParams(std::string name,
 
 	return p;
 }
-// 태양계 Setup -------------------------------------------------------
+
+// 자전축 방향 계산 함수 추가-------------------------------------------------------------
+glm::vec3 computeAxisDir(float tiltDeg)
+{
+	glm::mat4 R = glm::rotate(glm::mat4(1.0f),
+		glm::radians(tiltDeg),
+		glm::vec3(0, 0, 1));
+	return glm::normalize(glm::vec3(R * glm::vec4(0, 1, 0, 0)));
+}
+
+// 선(line) 그리는 함수 추가 -------------------------------------------------------------
+void drawAxisLine(const glm::vec3& center,
+	const glm::vec3& axisDir,
+	const Shader& axisShader,
+	const glm::mat4& view,
+	const glm::mat4& proj)
+{
+	float length = 5.0f;
+	glm::vec3 p1 = center + axisDir * length;
+	glm::vec3 p2 = center - axisDir * length;
+
+	float verts[6] = { p1.x, p1.y, p1.z, p2.x, p2.y, p2.z };
+
+	unsigned int VAO, VBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+
+	glBindVertexArray(VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	axisShader.use();
+	axisShader.setMat4("view", view);
+	axisShader.setMat4("proj", proj);
+
+	glLineWidth(1.0f);
+	glDrawArrays(GL_LINES, 0, 2);
+
+	glDeleteBuffers(1, &VBO);
+	glDeleteVertexArrays(1, &VAO);
+}
+
+
+// ================================================================
+// 태양계 Setup
+// ================================================================
 void setupSolarSystem(Sun& sun)
 {
-	// [ 행성 ] ----------------------------------------------------------
-	// 1) 수성 (Mercury)
+	// ================================================================
+	// Mercury (수성)
+	// ================================================================
 	PlanetParams mercuryP = createPlanetParams(
-		"Mercury",
-		0.25f,			  // 렌더링 반지름
-		16.0f,            // 태양 거리(시뮬레이션 스케일)
-		0.2056f,          // 이심률 (실제 값)
-		0.0f,             // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		0.1f,             // 자전 속도
-		"textures/2k_mercury.jpg"
+		"Mercury",                  // 행성 이름
+		0.25f,                      // 렌더링 반지름
+		16.0f,                      // 시뮬레이션 스케일 거리
+		0.2056f,                    // 이심률
+		0.240846f,                  // 공전 주기(년)
+		360.0f / 58.646f,           // 자전 속도 (deg/day)
+		"textures/2k_mercury.jpg"   // 텍스처 경로
 	);
 
-	// 수성 실제 궤도 요소 추가 (NASA JPL Elements)
-	mercuryP.orbit.inclinationDeg = 7.005f;     // 궤도 경사각 i
-	mercuryP.orbit.ascNodeDeg = 48.33167f;		// 승교점 경도 Ω
-	mercuryP.orbit.argPeriDeg = 29.124f;		// 근일점 인수 ω
-	mercuryP.orbit.meanAnomalyAtEpochDeg = 174.796f;	// 평균근점이각 M₀
-	mercuryP.orbit.periodYears = 0.240846f;		// 실제 공전주기
+	// 수성 궤도 요소 (NASA JPL Elements)
+	mercuryP.orbit.inclinationDeg = 7.005f;            // 궤도 경사각
+	mercuryP.orbit.ascNodeDeg = 48.33167f;			   // 승교점 경도
+	mercuryP.orbit.argPeriDeg = 29.124f;               // 근일점 인수
+	mercuryP.orbit.meanAnomalyAtEpochDeg = 174.796f;   // 평균근점이각
+	mercuryP.orbit.periodYears = 0.240846f;			   // 공전 주기(년)
+	mercuryP.orbit.perihelionPrecessionDegPerYear = 0.015555f;  // 근일점 세차
+	mercuryP.orbit.ascNodePrecessionDegPerYear = -0.005000f;    // 승교점 세차
+	mercuryP.axialTiltDeg = 0.034f; 					// 자전축 기울기
 
-	// 객체 생성 + 태양에 추가
-	Planet mercury(mercuryP);
-	sun.addPlanet(mercury); // [0] 등록
+	Planet mercury(mercuryP);      // 수성 Planet 객체 생성
+	sun.addPlanet(mercury);        // 태양에 수성 등록
 
-	// --------------------------------------------------------------------
-	// 2) 금성 (Venus)
+	// ================================================================
+	// Venus (금성)
+	// ================================================================
 	PlanetParams venusP = createPlanetParams(
-		"Venus",
-		0.60f,              // 렌더링 반지름
-		25.0f,              // 태양 거리 (시뮬레이션 스케일)
-		0.006773f,          // 이심률 (실제 값)
-		0.0f,               // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		-0.05f,             // 역자전 (금성 자전은 시계 방향)
-		"textures/2k_venus_atmosphere.jpg"
+		"Venus",                    // 행성 이름
+		0.60f,                      // 렌더링 반지름
+		24.0f,                      // 시뮬레이션 스케일 거리
+		0.0067f,                    // 이심률
+		0.615197f,                  // 공전 주기(년, 224.701일)
+		-360.0f / 243.0185f,        // 자전 속도 (역자전 → 음수, deg/day)
+		"textures/2k_venus.jpg"     // 텍스처 경로
 	);
 
-	// 금성 실제 궤도 요소 추가 (NASA JPL Elements)
-	venusP.orbit.inclinationDeg = 3.39458f;    // 궤도 경사각 i
-	venusP.orbit.ascNodeDeg = 76.67984f;	   // 승교점 경도 Ω
-	venusP.orbit.argPeriDeg = 54.884f;		   // 근일점 인수 ω
-	venusP.orbit.meanAnomalyAtEpochDeg = 50.416f;	// 평균근점이각 M₀
-	venusP.orbit.periodYears = 0.615197f;	   // 실제 공전주기
+	// 금성 궤도 요소 (NASA JPL Elements)
+	venusP.orbit.inclinationDeg = 3.39471f;          // 궤도 경사각
+	venusP.orbit.ascNodeDeg = 76.68069f;			 // 승교점 경도
+	venusP.orbit.argPeriDeg = 54.884f;				 // 근일점 인수
+	venusP.orbit.meanAnomalyAtEpochDeg = 50.115f;    // 평균근점이각
+	venusP.orbit.periodYears = 0.615197f;            // 공전 주기(년)
+	venusP.orbit.perihelionPrecessionDegPerYear = 0.007777f;   // 근일점 세차
+	venusP.orbit.ascNodePrecessionDegPerYear = -0.003900f;     // 승교점 세차
+	venusP.axialTiltDeg = 177.36f; 					 // 자전축 기울기
 
-	// 객체 생성 + 태양에 추가
-	Planet venus(venusP);
-	sun.addPlanet(venus);   // [1] 등록
+	Planet venus(venusP);          // 금성 Planet 객체 생성
+	sun.addPlanet(venus);          // 태양에 금성 등록
 
-	// --------------------------------------------------------------------
-	// 3) 지구 (Earth)
+	// ================================================================
+	// Earth (지구)
+	// ================================================================
 	PlanetParams earthP = createPlanetParams(
-		"Earth",
-		0.65f,				// 렌더링 반지름
-		34.0f,				// 태양 거리 (시뮬레이션 스케일)
-		0.0167086f,         // 이심률 (실제 값)
-		0.0f,               // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		1.0f,               // 자전 속도
-		"textures/2k_earth_daymap.jpg"
+		"Earth",                    // 행성 이름
+		0.65f,                      // 렌더링 반지름
+		32.0f,                      // 시뮬레이션 스케일 거리
+		0.01671022f,                // 이심률
+		1.000000f,                  // 공전 주기(년)
+		360.0f / 0.99726968f,       // 자전 속도(항성일 0.99726968일)
+		"textures/2k_earth_day.jpg" // 텍스처 경로
 	);
 
-	// 지구 실제 궤도 요소 추가 (NASA JPL Elements)
-	earthP.orbit.inclinationDeg = 0.00005f;    // 궤도 경사각 i
-	earthP.orbit.ascNodeDeg = -11.26064f;	   // 승교점 경도 Ω
-	earthP.orbit.argPeriDeg = 102.94719f;	   // 근일점 인수 ω
-	earthP.orbit.meanAnomalyAtEpochDeg = 357.51716f;	// 평균근점이각 M₀
-	earthP.orbit.periodYears = 1.000000f;      // 실제 공전주기
+	// 지구 궤도 요소 (NASA JPL Elements)
+	earthP.mass = 5.9722e24; 						 // 질량
+	earthP.orbit.inclinationDeg = 0.00005f;          // 궤도 경사각
+	earthP.orbit.ascNodeDeg = -11.26064f;			 // 승교점 경도 
+	earthP.orbit.argPeriDeg = 114.20783f;			 // 근일점 인수 
+	earthP.orbit.meanAnomalyAtEpochDeg = 357.51716f; // 평균근점이각
+	earthP.orbit.periodYears = 1.000000f;            // 공전 주기(년)
+	earthP.orbit.ascNodePrecessionDegPerYear = -0.01397f;
+	earthP.orbit.perihelionPrecessionDegPerYear = 0.01397f;
+	earthP.axialTiltDeg = 23.439f;					 // 자전축 기울기
 
-	Planet earth(earthP);
+	Planet earth(earthP);   // 지구 생성
 
-	// 위성 등록은 해당 Sun에 추가하기 전에 해당 행성에 추가하기 
-	// 달 (Moon)
-	SatelliteParams moonP = createSatelliteParams(
-		"Moon",
-		0.18f,                  // 렌더링 반지름
-		3.0f,                   // 지구 기준 거리 (시각적 스케일)
-		0.0549f,                // 이심률 (실제 값)
-		0.0f,					// 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		0.0f,                   // 자전 속도 (시각적 속도, 실제 자전주기를 적용하니 0.0f로 한다.)
-		"textures/2k_moon.jpg"
-	);
+	// ================================================================
+	// + Moon (달)
+	// ================================================================
+	SatelliteParams moonP{
+		"Moon",                         // 이름
+		0.0123f,                        // 질량 (사용 안 해도 무관)
+		0.18f,                          // 렌더링 반지름
+		glm::vec3(1.0f),                // 기본 색상 (텍스처 사용)
+		{
+			3.844f,                     // 거리
+			0.0549f,                    // 이심률
+			5.145f,                     // 궤도 경사각
+			125.08f,                    // 승교점 경도
+			318.15f,                    // 근일점 인수
+			27.321661f / 365.25f,       // 공전 주기(년) — 27.321661일/365.25
+			115.3654f                   // 평균근점이각
+		},
+		360.0f / 27.321661f,            // 자전 속도 — 조석고정
+		2000,                           // trail 포인트
+		"textures/2k_moon.jpg"          // 달 텍스처
+	};
 
-	// 달 실제 궤도 요소 (지구 기준)
-	moonP.orbit.inclinationDeg = 5.145f;			// 궤도 경사각 i
-	moonP.orbit.ascNodeDeg = 125.08f;				// 승교점 경도 Ω
-	moonP.orbit.argPeriDeg = 318.15f;			    // 근일점 인수 ω
-	moonP.orbit.meanAnomalyAtEpochDeg = 135.27f;    // 평균근점이각 M₀
-	moonP.orbit.periodYears = 27.321661f / 365.25f; // 실제 공전주기
-	moonP.spinDegPerSec = 360.0f / (moonP.orbit.periodYears * 365.25f * 24.0f * 3600.0f); // 조석 고정
+	moonP.mass = 7.34767309e22; 						     // 질량
+	moonP.orbit.perihelionPrecessionDegPerYear = 0.1114f;    // 근지점 세차(약 3232.6일 주기)
+	moonP.orbit.ascNodePrecessionDegPerYear = -0.053f;       // 승교점 세차(18.6년 주기)
+	moonP.axialTiltDeg = 6.687f; 						     // 자전축 기울기
 
-	// 위성 객체 생성 후 지구에 추가
-	Satellite moon(moonP);
-	earth.addSatellite(moon);
-	sun.addPlanet(earth); // [2] 등록
+	Satellite moon(moonP);        // 달 생성
+	earth.addSatellite(moon);     // 지구 위성으로 달 등록
+	sun.addPlanet(earth);		  // 태양에 지구 추가
 
-	// --------------------------------------------------------------------
-	// 4) 화성 (Mars)
+	// ================================================================
+	// Mars (화성)
+	// ================================================================
 	PlanetParams marsP = createPlanetParams(
-		"Mars",
-		0.34f,               // 렌더링 반지름
-		49.0f,               // 태양 거리 (시뮬레이션 스케일)
-		0.0934f,             // 이심률 (실제 값)
-		0.0f,                // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		0.97f,               // 자전 속도
-		"textures/2k_mars.jpg"
+		"Mars",                     // 행성 이름
+		0.45f,                      // 렌더링 반지름
+		48.0f,                      // 시뮬레이션 스케일 거리
+		0.0934f,                    // 이심률
+		1.8808476f,                 // 공전 주기(년, 686.980일)
+		360.0f / 1.025957f,         // 자전 속도(화성 하루 1.025957일)
+		"textures/2k_mars.jpg"      // 텍스처 경로
 	);
 
-	// 화성 실제 궤도 요소 (NASA JPL Elements)
-	marsP.orbit.inclinationDeg = 1.850f;     // 궤도 경사각 i
-	marsP.orbit.ascNodeDeg = 49.558f;		 // 승교점 경도 Ω
-	marsP.orbit.argPeriDeg = 286.502f;       // 근일점 인수 ω
-	marsP.orbit.meanAnomalyAtEpochDeg = 19.412f;	// 평균근점이각 M₀
-	marsP.orbit.periodYears = 1.8808476f;	 // 실제 공전주기
+	// 화성 궤도 요소 (NASA JPL Elements)
+	marsP.orbit.inclinationDeg = 1.85061f;           // 궤도 경사각
+	marsP.orbit.ascNodeDeg = 49.57854f;				 // 승교점 경도 
+	marsP.orbit.argPeriDeg = 286.502f;				 // 근일점 인수 
+	marsP.orbit.meanAnomalyAtEpochDeg = 19.412f;     // 평균근점이각
+	marsP.orbit.periodYears = 1.8808476f;            // 공전 주기(년)
+	marsP.orbit.perihelionPrecessionDegPerYear = 0.004166f;  // 근일점 세차
+	marsP.orbit.ascNodePrecessionDegPerYear = -0.002000f;    // 승교점 세차
 
-	// 객체 생성 + 태양에 등록
-	Planet mars(marsP);
-	sun.addPlanet(mars);   // [3] 등록
+	Planet mars(marsP);            // 화성 Planet 객체 생성
+	sun.addPlanet(mars);           // 태양에 화성 등록
 
-	// --------------------------------------------------------------------
-	// 5) 목성 (Jupiter)
+
+	// ================================================================
+	// Jupiter (목성)
+	// ================================================================
 	PlanetParams jupiterP = createPlanetParams(
-		"Jupiter",
-		2.8f,                // 렌더링 반지름
-		94.0f,               // 태양 거리 (시뮬레이션 스케일)
-		0.0489f,             // 이심률 (실제 값)
-		0.0f,                // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		2.4f,                // 자전 속도
-		"textures/2k_jupiter.jpg"
+		"Jupiter",                  // 행성 이름
+		2.8f,                       // 렌더링 반지름
+		94.0f,                     // 시뮬레이션 스케일 거리
+		0.0489f,                    // 이심률
+		11.862615f,                 // 공전 주기(년)
+		360.0f / 0.41354f,          // 자전 속도 (목성 하루 0.41354일)
+		"textures/2k_jupiter.jpg"   // 텍스처 경로
 	);
 
-	// 목성 실제 궤도 요소 (NASA JPL Elements)
-	jupiterP.orbit.inclinationDeg = 1.303f;       // 궤도 경사각 i
-	jupiterP.orbit.ascNodeDeg = 100.556f;		  // 승교점 경도 Ω
-	jupiterP.orbit.argPeriDeg = 14.75385f;		  // 근일점 인수 ω
-	jupiterP.orbit.meanAnomalyAtEpochDeg = 20.0202f;	// 평균근점이각 M₀
-	jupiterP.orbit.periodYears = 11.862615f;	  // 실제 공전주기
+	// 목성 궤도 요소 (NASA JPL Elements)
+	jupiterP.mass = 1.8985e27f; 					  // 질량
+	jupiterP.orbit.inclinationDeg = 1.303f;           // 궤도 경사각
+	jupiterP.orbit.ascNodeDeg = 100.55615f;			  // 승교점 경도
+	jupiterP.orbit.argPeriDeg = 273.867f;			  // 근일점 인수 
+	jupiterP.orbit.meanAnomalyAtEpochDeg = 20.020f;   // 평균근점이각 
+	jupiterP.orbit.periodYears = 11.862615f;          // 공전 주기(년)
+	jupiterP.orbit.perihelionPrecessionDegPerYear = 0.000194f;  // 근일점 세차
+	jupiterP.orbit.ascNodePrecessionDegPerYear = -0.000150f;	// 승교점 세차
+	jupiterP.axialTiltDeg = 3.13f; 					  // 자전축 기울기
 
+	jupiterP.ring.enabled = true;
+	jupiterP.ring.innerRadius = 2.0f;   // 목성 고리 내경 
+	jupiterP.ring.outerRadius = 2.03f;  // 목성 고리 외경
+	jupiterP.ring.alpha = 0.005f;		// 목성 고리는 아주 희미함
+	jupiterP.ring.texturePath = "textures/2k_jupiter_ring_alpha.png";  // 텍스쳐 경로
 
+	Planet jupiter(jupiterP);			// 목성 생성
 
-	// 객체 생성 + 태양에 등록
-	Planet jupiter(jupiterP);
-	// 2. 목성 위성 유로파 (Europa)
-	// 반지름: 0.15, 거리: 9.0 (목성 표면 위), 이심률: 0.009 (실제값), 공전속도: 6.0
-	SatelliteParams europaP = createSatelliteParams(
-		"Europa",
-		0.15f,
-		9.0f,
-		0.009f, // 실제 유로파 이심률 (거의 원)
-		0.08f,
-		5.0f,
-		"textures/europa.jpg"
-	);
+	// ================================================================
+	// Europa (유로파)
+	// ================================================================
+	SatelliteParams europaP{
+		"Europa",                      // 위성 이름
+		0.0625f,                       // 위성 질량
+		0.20f,                         // 렌더링 반지름
+		glm::vec3(1.0f),               // 색상 (텍스처 사용하므로 의미 X)
+		{
+			7.5f,                      // 거리 스케일(목성 중심)
+			0.0094f,                   // 이심률
+			0.470f,                    // 궤도 경사각
+			219.106f,                  // 승교점 경도
+			88.970f,                   // 근지점 인수
+			3.551181f / 365.25f,       // 공전 주기(년) — 3.551181일
+			128.0f                     // 평균근점이각
+		},
+		360.0f / 3.551181f,            // 자전 속도 — 조석고정
+		2000,                          // trail 포인트 개수
+		"textures/2k_europa.jpg"       // 유로파 텍스처
+	};
 
-	// [유로파 궤도 요소 디테일 설정]
-	// 유로파는 목성 적도면 기준 약 0.47도 기울어져 있습니다. (거의 수평)
-	europaP.orbit.inclinationDeg = 0.47f;  // 궤도 경사각
-	europaP.orbit.ascNodeDeg = 219.0f;     // 승교점 경도 (임의의 기준값)
-	europaP.orbit.argPeriDeg = 15.0f;      // 근일점 편각 (임의의 기준값)
+	europaP.mass = 4.80e22f; 		   // 질량
+	europaP.orbit.perihelionPrecessionDegPerYear = 0.0101f;   // 근지점 세차
+	europaP.orbit.ascNodePrecessionDegPerYear = -0.0111f;	  // 승교점 세차
+	europaP.axialTiltDeg = 0.1f; 							  // 자전축 기울기
 
-	Satellite europa(europaP);
-	jupiter.addSatellite(europa); // 목성에 추가
-	sun.addPlanet(jupiter);   // [4] 등록
+	Satellite europa(europaP);      // 유로파 생성
+	jupiter.addSatellite(europa);	// 목성에 유로파 위성 등록
+	sun.addPlanet(jupiter);         // 태양에 목성 등록
 
-	// --------------------------------------------------------------------
-	// 6) 토성 (Saturn)
+	// ================================================================
+	// Saturn (토성)
+	// ================================================================
 	PlanetParams saturnP = createPlanetParams(
-		"Saturn",
-		2.5f,               // 렌더링 반지름
-		140.0f,             // 태양과 거리 (시뮬레이션 스케일)
-		0.0565f,            // 이심률 (실제 값)
-		0.25f,              // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		2.0f,               // 자전 속도
-		"textures/2k_saturn.jpg"
+		"Saturn",                   // 행성 이름
+		2.5f,                       // 렌더링 반지름
+		140.0f,                     // 시뮬레이션 스케일 거리
+		0.0565f,                    // 이심률
+		29.4571f,                   // 공전 주기(년, 10759일)
+		360.0f / 0.44401f,          // 자전 속도(토성 하루 0.44401일)
+		"textures/2k_saturn.jpg"    // 텍스처 경로
 	);
 
-	// 토성의 실제 궤도 요소 (NASA JPL Elements)
-	saturnP.orbit.inclinationDeg = 2.485f;      // 궤도 경사각 i
-	saturnP.orbit.ascNodeDeg = 113.715f;		// 승교점 경도 Ω
-	saturnP.orbit.argPeriDeg = 92.43194f;		// 근일점 인수 ω
-	saturnP.orbit.meanAnomalyAtEpochDeg = 317.0207f;   // 평균근점이각 M₀
-	saturnP.orbit.periodYears = 29.447498f;		// 실제 공전주기
+	// 토성 궤도 요소 (NASA JPL Elements)
+	saturnP.mass = 5.683e26f; 					     // 질량
+	saturnP.orbit.inclinationDeg = 2.485f;           // 궤도 경사각
+	saturnP.orbit.ascNodeDeg = 113.662f;			 // 승교점 경도
+	saturnP.orbit.argPeriDeg = 339.392f;			 // 근일점 인수
+	saturnP.orbit.meanAnomalyAtEpochDeg = 317.020f;  // 평균근점이각
+	saturnP.orbit.periodYears = 29.4571f;			 // 공전 주기(년)
+	saturnP.orbit.perihelionPrecessionDegPerYear = 0.000100f;  // 근일점 세차
+	saturnP.orbit.ascNodePrecessionDegPerYear = -0.000070f;	   // 승교점 세차
+	saturnP.axialTiltDeg = 26.73f; 					 // 자전축 기울기
 
-	// 객체 생성 + 태양에 추가
-	Planet saturn(saturnP);
+	saturnP.ring.enabled = true;	// 고리 활성화
+	saturnP.ring.innerRadius = 1.2f;// 토성 고리 내경
+	saturnP.ring.outerRadius = 2.4f;// 토성 고리 외경
+	saturnP.ring.alpha = 0.9f;		// 토성 고리 투명도
+	saturnP.ring.texturePath = "textures/2k_saturn_ring_alpha.png";
 
-	// 토성 위성 타이탄 (Titan)
-	SatelliteParams titanP = createSatelliteParams(
-		"Titan",
-		0.25f,   // 반지름: 달보다 좀 큼
-		15.0f,   // 거리: 고리에 안 닿게 멀리 배치 (토성 반지름이 5.8임)
-		0.028f,  // 이심률
-		0.13f,    // 공전 속도
-		2.0f,    // 자전 속도
-		"textures/2k_titan.jpg"
-	);
-	// 타이탄도 궤도가 살짝 기울어져 있음 (약 0.3도)
-	titanP.orbit.inclinationDeg = 0.348f;
+	Planet saturn(saturnP);         // 토성 생성
 
-	Satellite titan(titanP);
-	saturn.addSatellite(titan); // 토성에 추가
+	// ================================================================
+	// Titan (타이탄)
+	// ================================================================
+	SatelliteParams titanP{
+		"Titan",                        // 위성 이름
+		0.2225f,                        // 질량
+		0.1105f,                        // 렌더링 반지름
+		glm::vec3(1.0f),                // 색상 (텍스처 사용)
+		{
+			10.0f,                      // 거리 스케일(토성 중심)
+			0.0288f,                    // 이심률
+			0.34854f,                   // 궤도 경사각
+			168.77f,                    // 승교점 경도
+			186.585f,                   // 근지점 인수
+			15.945f / 365.25f,          // 공전 주기(년) — 15.945일
+			17.0f                       // 평균근점이각
+		},
+		360.0f / 15.945f,               // 자전 속도 — 조석고정
+		2000,                           // trail 포인트 개수
+		"textures/2k_titan.jpg"         // 타이탄 텍스처
+	};
 
-	sun.addPlanet(saturn);   // [5] 등록
+	titanP.mass = 1.3452e23f; 		    // 질량
+	titanP.orbit.perihelionPrecessionDegPerYear = 0.0038f;    // 근지점 세차
+	titanP.orbit.ascNodePrecessionDegPerYear = -0.0046f;	  // 승교점 세차
+	titanP.axialTiltDeg = 0.3f; 							  // 자전축 기울기
 
-	// --------------------------------------------------------------------
-	// 7) 천왕성 (Uranus)
+	Satellite titan(titanP);         // 타이탄 생성
+	saturn.addSatellite(titan);		 // 토성에 타이탄 추가
+	sun.addPlanet(saturn);           // 태양에 토성 등록
+
+	// ================================================================
+	// Uranus (천왕성)
+	// ================================================================
 	PlanetParams uranusP = createPlanetParams(
-		"Uranus",
-		1.8f,                // 렌더링 반지름
-		190.0f,              // 태양 거리 (시뮬레이션 스케일)
-		0.0472f,             // 이심률 (실제 값)
-		0.15f,               // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		-1.4f,               // 자전속도 (천왕성은 '거의 90도 눕는' 극단적인 역자전 → 음수로 표현)
-		"textures/2k_uranus.jpg",
-		98.0f
+		"Uranus",                    // 행성 이름
+		1.80f,                       // 렌더링 반지름
+		190.0f,                      // 시뮬레이션 스케일 거리
+		0.04726f,                    // 이심률
+		84.016846f,                  // 공전 주기(년)
+		-(360.0f / 0.71833f),        // 자전 속도 (17.24h = 0.71833일, 역행 = 음수)
+		"textures/2k_uranus.jpg",    // 텍스처 경로
+		97.77f                       // 자전축 기울기
 	);
 
-	// 천왕성 실제 궤도 요소 (NASA JPL Elements)
-	uranusP.orbit.inclinationDeg = 0.773f;      // 궤도 경사각 i
-	uranusP.orbit.ascNodeDeg = 74.006f;			// 승교점 경도 Ω
-	uranusP.orbit.argPeriDeg = 96.998857f;		// 근일점 인수 ω
-	uranusP.orbit.meanAnomalyAtEpochDeg = 142.2386f;   // 평균근점이각 M₀
-	uranusP.orbit.periodYears = 84.016846f;		// 실제 공전주기
+	// 천왕성 궤도 요소 (NASA JPL Elements)
+	uranusP.mass = 8.6810e25f; 					      // 질량
+	uranusP.orbit.inclinationDeg = 0.773f;            // 궤도 경사각
+	uranusP.orbit.ascNodeDeg = 74.006f;               // 승교점 경도
+	uranusP.orbit.argPeriDeg = 96.998857f;            // 근일점 인수
+	uranusP.orbit.meanAnomalyAtEpochDeg = 142.2386f;  // 평균근점이각
+	uranusP.orbit.periodYears = 84.016846f;           // 공전 주기(년, 동일하게 유지)
+	uranusP.orbit.perihelionPrecessionDegPerYear = 0.000095f;   // 근일점 세차
+	uranusP.orbit.ascNodePrecessionDegPerYear = -0.000095f;		// 승교점 세차
+	uranusP.axialTiltDeg = 97.77f; 					  // 자전축 기울기
 
-	// 객체 생성 + 태양 등록
-	Planet uranus(uranusP);
-	sun.addPlanet(uranus);   // [6] 등록
-	
-	// --------------------------------------------------------------------
-	// 8) 해왕성 (Neptune)
+	uranusP.ring.enabled = true;	 // 고리 활성화
+	uranusP.ring.innerRadius = 1.52f;// 천왕성 고리 내경
+	uranusP.ring.outerRadius = 1.55f;// 천왕성 고리 외경
+	uranusP.ring.alpha = 0.005f;	 // 천왕성 고리 투명도
+	uranusP.ring.texturePath = "textures/2k_uranus_ring_alpha.png";
+
+	Planet uranus(uranusP);        // 천왕성 객체 생성
+
+	SatelliteParams oberonP{
+		"Oberon",				   // 위성 이름
+		0.225f,					   // 질량
+		0.054f,                    // 렌더링 반지름
+		glm::vec3(1.0f),		   // 색상 (텍스처 사용)
+		{
+			8.0f,                  // 거리 스케일 (천왕성 중심)
+			0.0014f,               // 이심률
+			0.34854f,              // 궤도 경사각
+			168.77f,               // 승교점 경도
+			186.585f,              // 근지점 인수
+			13.463234f / 365.25f,  // 공전 주기(년)
+			17.0f                  // 평균근점이각
+		},
+		360.0f / 13.463234f,       // 조석 고정
+		2000,
+		"textures/2k_oberon.jpg"
+	};
+
+	oberonP.mass = 3.014e21f; 	   // 질량
+	oberonP.orbit.perihelionPrecessionDegPerYear = 0.0035f;   // 근지점 세차 (조금 작게)
+	oberonP.orbit.ascNodePrecessionDegPerYear = -0.0042f;  // 승교점 세차
+	oberonP.axialTiltDeg = 0.0f;   // 자전축 기울기
+
+	Satellite oberon(oberonP);     // 오베론 생성
+	uranus.addSatellite(oberon);   // 천왕성에 타이탄 추가
+	sun.addPlanet(uranus);         // 태양에 천왕성 등록
+
+	// ================================================================
+	// Neptune (해왕성)
+	// ================================================================
 	PlanetParams neptuneP = createPlanetParams(
-		"Neptune",
-		1.7f,                // 렌더링 반지름
-		230.0f,              // 태양 거리 (시뮬레이션 스케일)
-		0.008678f,           // 이심률 (실제 값)
-		0.0f,                // 공전 속도 스케일 (시각적 속도, 실제 공전주기를 적용하니 0.0f로 한다.)
-		1.5f,                // 자전 속도 (Neptune은 빠른 자전)
-		"textures/2k_neptune.jpg"
+		"Neptune",                   // 행성 이름
+		1.70f,                       // 렌더링 반지름
+		230.0f,                      // 시뮬레이션 스케일 거리
+		0.008678f,                   // 이심률
+		164.8922113f,                // 공전 주기(년)
+		360.0f / 0.67125f,           // 자전 속도 (자전주기 약 16.11h = 0.67125 day)
+		"textures/2k_neptune.jpg"    // 텍스처 경로
 	);
 
-	// 해왕성 실제 궤도 요소 (NASA JPL Elements)
-	neptuneP.orbit.inclinationDeg = 1.769f;       // 궤도 경사각 i
-	neptuneP.orbit.ascNodeDeg = 131.784f;		  // 승교점 경도 Ω
-	neptuneP.orbit.argPeriDeg = 273.187f;		  // 근일점 인수 ω
-	neptuneP.orbit.meanAnomalyAtEpochDeg = 259.908f;	// 평균근점이각 M₀
-	neptuneP.orbit.periodYears = 164.79132f;      // 실제 공전주기
+	// 해왕성 궤도 요소 (NASA JPL Elements)
+	neptuneP.mass = 1.02413e26f;
+	neptuneP.orbit.inclinationDeg = 1.769f;       // 궤도 경사각
+	neptuneP.orbit.ascNodeDeg = 131.784f;		  // 승교점 경도
+	neptuneP.orbit.argPeriDeg = 273.187f;		  // 근일점 인수
+	neptuneP.orbit.meanAnomalyAtEpochDeg = 259.908f;		   // 평균근점이각
+	neptuneP.orbit.periodYears = 164.8922113f;	  // 공전 주기(년)
+	neptuneP.orbit.perihelionPrecessionDegPerYear = 0.000032f; // 근일점 세차
+	neptuneP.orbit.ascNodePrecessionDegPerYear = -0.000032f;   // 승교점 세차
+	neptuneP.axialTiltDeg = 28.32f; 			  // 자전축 기울기
 
-	// 객체 생성 + 태양 등록
-	Planet neptune(neptuneP);
-	sun.addPlanet(neptune);   // [7] 등록
+	neptuneP.ring.enabled = true;	  // 고리 활성화
+	neptuneP.ring.innerRadius = 1.6f; // 해왕성 고리 내경
+	neptuneP.ring.outerRadius = 1.63f;// 해왕성 고리 외경
+	neptuneP.ring.alpha = 0.005f;	  // 해왕성 고리 투명도
+	neptuneP.ring.texturePath = "textures/2k_neptune_ring_alpha.png";
+
+	Planet neptune(neptuneP);   // 해왕성 객체 생성
+
+	// ================================================================
+	// Triton (트리톤)
+	// ================================================================
+	SatelliteParams tritonP{
+		"Triton",                       // 위성 이름
+		2.139e22f,                      // 질량
+		0.0934f,                        // 렌더링 반지름
+		glm::vec3(1.0f),                // 색상 (텍스처 사용)
+		{
+			6.0f,                       // 거리 스케일 (해왕성 중심)
+			0.000016f,                  // 이심률
+			157.0f,                     // 궤도 경사각 (역행)
+			200.0f,                     // 승교점 경도
+			39.48f,                     // 근지점 인수
+			5.876854f / 365.25f,        // 실제 공전 주기(년)
+			358.0f                      // 평균근점이각
+		},
+		360.0f / 5.876854f,             // 조석고정
+		2000,                           // trail 포인트 개수
+		"textures/2k_triton.jpg"		// 텍스처 경로
+	};
+
+	tritonP.mass = 2.139e22f;								  // 질량
+	tritonP.orbit.perihelionPrecessionDegPerYear = 0.0050f;   // 근지점 세차
+	tritonP.orbit.ascNodePrecessionDegPerYear = -0.0050f; 	  // 승교점 세차
+	tritonP.axialTiltDeg = 0.3f; 							  // 자전축 기울기
+
+	Satellite triton(tritonP);           // 트리톤 생성
+	neptune.addSatellite(triton);		 // 해왕성에 트리톤 추가
+	sun.addPlanet(neptune);				 // 태양에 해왕성 등록
 
 	// ---------------------------------------------------------
 	// 9. 아스가르드 (Asgard) - 수직 궤도 행성
@@ -550,13 +716,13 @@ void setupSolarSystem(Sun& sun)
 		0.0f,   // 이심률
 		2.0f,   // 공전 속도: 꽤 빠름
 		5.0f,   // 자전 속도
-		"textures/2k_moon.jpg" // 텍스처 (없으면 달 텍스처 재활용)
+		"textures/2k_asgard.jpg" // 텍스처 (없으면 달 텍스처 재활용)
 	);
 
-	// [핵심] 궤도 경사각을 90도로 설정 (수직 공전)
+	// 궤도 경사각을 90도로 설정 (수직 공전)
 	asgardP.orbit.inclinationDeg = 90.0f;
 
-	// (선택) 궤도 교차 지점 설정 (0도면 X축에서 교차, 90도면 Z축에서 교차)
+	// 궤도 교차 지점 설정 (0도면 X축에서 교차, 90도면 Z축에서 교차)
 	asgardP.orbit.ascNodeDeg = 45.0f;
 
 	Planet asgard(asgardP);
@@ -571,25 +737,24 @@ void renderPlanet(Planet& planet,
 	float dtSeconds,
 	float worldScale,
 	const glm::vec3& worldPos,
-	unsigned int sphereVAO,      // VAO 바인딩
+	unsigned int sphereVAO,
 	bool isSun = false,
 	float emissionStrength = 1.0f)
 {
-	// 자전 업데이트
-	planet.advanceSpin(dtSeconds);
+	// 시뮬레이션 시간 기준 자전 업데이트 (배속 + 일시정지 반영)
+	float dtSimDays = (isPaused ? 0.0f : dtSeconds * simSpeedMultiplier);
+	planet.advanceSpin(dtSimDays);
 
-	// 텍스처 + 쉐이더 유니폼 설정
+	// 텍스처 + 쉐이더 설정
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, textureID);
 	shader.setInt("diffuseMap", 0);
 	shader.setInt("isSun", isSun ? 1 : 0);
 	shader.setFloat("emissionStrength", emissionStrength);
 
-	// 모델 매트릭스 생성 및 전송
 	glm::mat4 model = planet.buildModelMatrix(worldScale, worldPos);
 	shader.setMat4("model", model);
 
-	// 실제 그리기
 	glBindVertexArray(sphereVAO);
 	glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
 }
@@ -637,60 +802,81 @@ void renderSatellites(Planet& planet,
 		// relXZ는 시뮬레이션 단위이므로 scale을 곱해서 같은 단위로 맞춘다.
 		glm::vec3 satWorldPos = planetWorldPos + relXZ * scale;
 
-		// 5. 그리기
-		sat.drawAtWorld(shader, dt, scale, satWorldPos, sphereVAO, indexCount);
+		// 5. 렌더링 (자전도 시뮬레이션 배속 반영)
+		float dtSimDays = (isPaused ? 0.0f : dt * simSpeedMultiplier);
+		sat.drawAtWorld(shader, dtSimDays, scale, satWorldPos, sphereVAO, indexCount);
 	}
 }
 
-// 행성 위치 업데이트 및 렌더링 좌표 계산 함수
-// 리턴값: 행성의 최종 렌더링 위치 (World Position)
-glm::vec3 updatePlanetPhysics(Planet& planet, float simYears, float scaleUnits)
+// -------------------------------------------------------------
+//  행성 + 위성 질량중심(barycenter) 보정 포함 updatePlanetPhysics()
+//  - 모든 위성의 질량과 상대 위치를 합산하여 행성의 질량중심 보정 적용
+//  - 달 / 유로파 / 타이탄 모두 서로 다른 barycenter 반영
+// -------------------------------------------------------------
+void updatePlanetPhysics(
+	Planet& planet,
+	float simYears,
+	const glm::mat4& orbitToXZ,
+	float scaleUnits,
+	glm::vec3& outWorldPos)
 {
-	// ------------------------------------------------------------
-	// 1. 행성 위치 (XY 기반)
-	// ------------------------------------------------------------
+	// -----------------------------
+	// 1) 행성의 원래(순수) 궤도 위치
+	// -----------------------------
 	glm::vec3 physPos = planet.positionAroundSun(simYears);
 
-	// 회전 적용된 행성 trail 기록
-	glm::vec3 physPosXZ =
-		glm::vec3(orbitToXZ * glm::vec4(physPos, 1.0f));
-	// planet.recordTrail(physPosXZ);
+	// -----------------------------
+	// 2) 위성 목록
+	// -----------------------------
+	const auto& sats = planet.satellites();
 
-	// 행성 worldPos
-	glm::vec3 worldPos =
-		glm::vec3(orbitToXZ * glm::vec4(physPos * scaleUnits, 1.0f));
-
-	// ------------------------------------------------------------
-	// 2. 위성(달) 처리
-	// ------------------------------------------------------------
-	auto& sats = planet.satellites();
-	if (!sats.empty())
+	// 위성이 없다면 보정 없이 원래 위치 사용
+	if (sats.empty())
 	{
-		Satellite& moon = sats[0];
-
-		float Mp = planet.getParams().mass;
-		float Ms = moon.getParams().mass;
-
-		// (A) 달의 상대 궤도 좌표 (XY 기반)
-		glm::vec3 rel = moon.positionRelativeToPlanet(simYears);
-
-		// (B) 달의 상대 궤도를 XZ 평면으로 회전 (⭐ 매우 중요)
-		glm::vec3 relXZ =
-			glm::vec3(orbitToXZ * glm::vec4(rel, 1.0f));
-
-		// (C) barycenter 보정도 회전 전 값이 아닌 XY 기준 rel로 계산
-		glm::vec3 Re = -(Ms / (Mp + Ms)) * rel;
-
-		// (D) 행성 최종 worldPos (회전 포함)
-		worldPos =
-			glm::vec3(orbitToXZ *
-				glm::vec4((physPos + Re) * scaleUnits, 1.0f));
-
-		// (E) moon trail은 main loop에서 relXZ 기반 worldPos로 기록
-		//     updatePlanetPhysics에서는 trail 기록하지 않음.
+		outWorldPos = glm::vec3(
+			orbitToXZ * glm::vec4(physPos * scaleUnits, 1.0f));
+		return;
 	}
 
-	return worldPos;
+	// -----------------------------
+	// 3) 질량 정보
+	// -----------------------------
+	float Mp = planet.getParams().mass;  // 행성 질량
+
+	float sumMs = 0.0f;                  // 위성 총 질량
+	for (const auto& s : sats)
+		sumMs += s.getParams().mass;
+
+	// -----------------------------
+	// 4) 모든 위성 기반 barycenter offset 계산
+	// -----------------------------
+	glm::vec3 baryOffset(0.0f);
+
+	for (const auto& sat : sats)
+	{
+		// (XY 기준) 위성의 상대 위치 (행성 중심)
+		glm::vec3 rel = sat.positionRelativeToPlanet(simYears);
+
+		// barycenter 기여량
+		baryOffset += -(sat.getParams().mass / (Mp + sumMs)) * rel;
+	}
+
+	// -----------------------------
+	// 5) XY → XZ 평면 회전 적용
+	// -----------------------------
+	glm::vec3 baryOffsetXZ =
+		glm::vec3(orbitToXZ * glm::vec4(baryOffset, 1.0f));
+
+	// -----------------------------
+	// 6) 최종적으로 보정된 행성의 worldPos
+	// -----------------------------
+	glm::vec3 planetWorldPos =
+		glm::vec3(orbitToXZ * glm::vec4(physPos, 1.0f)) +
+		baryOffsetXZ;
+
+	planetWorldPos *= scaleUnits;
+
+	outWorldPos = planetWorldPos;
 }
 
 // main -------------------------------------------------------------
@@ -785,6 +971,7 @@ int main()
 		"uniform vec3 viewPos;\n"
 		"uniform int  isSun;\n"
 		"uniform float emissionStrength;\n"
+		"uniform float ringAlpha;\n"
 		"void main(){\n"
 		"  vec3 texColor = texture(diffuseMap, TexCoord).rgb;\n"
 		"  vec3 color;\n"
@@ -798,13 +985,49 @@ int main()
 		"    vec3 ambient = 0.1 * texColor;\n"
 		"    color = ambient + diffuse;\n"
 		"  }\n"
-		"  FragColor = vec4(color,1.0);\n"
+		"  FragColor = vec4(color, ringAlpha);\n"
 		"  float brightness = dot(color, vec3(0.2126,0.7152,0.0722));\n"
 		"  if(brightness > 1.0) BrightColor = vec4(color,1.0);\n"
 		"  else BrightColor = vec4(0.0,0.0,0.0,1.0);\n"
 		"}\n";
 
 	Shader sceneShader(sceneVert, sceneFrag);
+
+	sceneShader.use();
+	sceneShader.setFloat("ringAlpha", 1.0f);   // 기본값: 불투명
+
+	// ================================
+	// Ring Shader (고리 전용)
+	// ================================
+	const char* ringVert =
+		"#version 330 core\n"
+		"layout(location=0) in vec3 aPos;\n"
+		"layout(location=1) in vec2 aTex;\n"
+		"out vec2 TexCoord;\n"
+		"uniform mat4 model;\n"
+		"uniform mat4 view;\n"
+		"uniform mat4 proj;\n"
+		"void main(){\n"
+		"  TexCoord = aTex;\n"
+		"  gl_Position = proj * view * model * vec4(aPos,1.0);\n"
+		"}\n";
+
+	const char* ringFrag =
+		"#version 330 core\n"
+		"in vec2 TexCoord;\n"
+		"layout(location=0) out vec4 FragColor;\n"
+		"layout(location=1) out vec4 BrightColor;\n"
+		"uniform sampler2D ringTex;\n"
+		"uniform float alpha;\n"
+		"void main(){\n"
+		"  vec4 c = texture(ringTex, TexCoord);\n"
+		"  if(c.a < 0.05) discard;\n"
+		"  vec4 col = vec4(c.rgb, c.a * alpha);\n"
+		"  FragColor = col;\n"
+		"  BrightColor = vec4(0.0, 0.0, 0.0, 1.0); // ★ 고리는 항상 Bloom 0\n"
+		"}\n";
+
+	Shader ringShader(ringVert, ringFrag);
 
 	// Orbit / trail line shader ------------------------------------
 	const char* lineVert =
@@ -874,22 +1097,35 @@ int main()
 
 	Shader finalShader(quadVert, finalFrag);
 
+	// =====================
+	// Axis Line Shader
+	// =====================
+	const char* axisVert =
+		"#version 330 core\n"
+		"layout(location=0) in vec3 aPos;\n"
+		"uniform mat4 view;\n"
+		"uniform mat4 proj;\n"
+		"void main(){\n"
+		"   gl_Position = proj * view * vec4(aPos, 1.0);\n"
+		"}\n";
+
+	const char* axisFrag =
+		"#version 330 core\n"
+		"out vec4 FragColor;\n"
+		"void main(){ FragColor = vec4(1.0); }\n";
+
+	Shader axisShader(axisVert, axisFrag);
+
 	// 기하 생성 ----------------------------------------------------
 	unsigned int sphereVAO, sphereIndexCount;
 	createSphere(sphereVAO, sphereIndexCount);
 
+	// 화면 전체 Quad (블룸/합성용)
 	unsigned int quadVAO, quadVBO;
 	createQuad(quadVAO, quadVBO);
 
-	unsigned int ringVAO, ringVBO;
-	createRingMesh(ringVAO, ringVBO); // 토성 전용 메시 생성
-
-	// 텍스처 -------------------------------------------------------
-	// loadTexture -> loadTextureWithCheck로 변경
-
+	// 행성 -------------------------------------------------------
 	unsigned int texSun = loadTextureWithCheck("textures/2k_sun.jpg");
-
-	// 행성
 	unsigned int texMercury = loadTextureWithCheck("textures/2k_mercury.jpg");
 	unsigned int texVenus = loadTextureWithCheck("textures/2k_venus_surface.jpg");
 	unsigned int texEarth = loadTextureWithCheck("textures/2k_earth_daymap.jpg");
@@ -898,19 +1134,23 @@ int main()
 	unsigned int texSaturn = loadTextureWithCheck("textures/2k_saturn.jpg");
 	unsigned int texUranus = loadTextureWithCheck("textures/2k_uranus.jpg");
 	unsigned int texNeptune = loadTextureWithCheck("textures/2k_neptune.jpg");
-	unsigned int texAsgard = loadTextureWithCheck("textures/2k_neptune.jpg");
+	unsigned int texAsgard = loadTextureWithCheck("textures/2k_asgard.jpg");
 
-	// 위성
+	// 위성 ---------------------------------------------------
 	unsigned int texMoon = loadTextureWithCheck("textures/2k_moon.jpg");
-	unsigned int texEuropa = loadTextureWithCheck("textures/2k_moon.jpg");
-	unsigned int texTitan = loadTextureWithCheck("textures/2k_moon.jpg");
+	unsigned int texEuropa = loadTextureWithCheck("textures/2k_europa.jpg");
+	unsigned int texTitan = loadTextureWithCheck("textures/2k_titan.jpg");
+	unsigned int texOberon = loadTextureWithCheck("textures/2k_oberon.jpg");
+	unsigned int texTriton = loadTextureWithCheck("textures/2k_triton.jpg");
+
+	// 고리 -----------------------------------------------------
+	unsigned int texJupiterRing = loadTextureWithCheck("textures/2k_jupiter_ring_alpha.png");
+	unsigned int texSaturnRing = loadTextureWithCheck("textures/2k_saturn_ring_alpha.png");
+	unsigned int texUranusRing = loadTextureWithCheck("textures/2k_uranus_ring_alpha.png");
+	unsigned int texNeptuneRing = loadTextureWithCheck("textures/2k_neptune_ring_alpha.png");
 
 	// Skybox
 	unsigned int skyTex = loadTextureWithCheck("textures/2k_stars_milky_way.jpg");
-
-	// 부가 요소
-	unsigned int texSaturnRing = loadTextureWithCheck("textures/Saturn_ring-removebg.png"); // 토성 고리
-	unsigned int texUranusRing = loadTextureWithCheck("textures/2k_Uranus_ring.png"); // 천왕성 고리
 
 	// 태양계 -------------------------------------------------------
 	Sun sun;
@@ -920,7 +1160,6 @@ int main()
 	unsigned int hdrFBO;
 	glGenFramebuffers(1, &hdrFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
-	
 
 	unsigned int colorBuffers[2];
 	glGenTextures(2, colorBuffers);
@@ -975,7 +1214,10 @@ int main()
 
 	float lastTime = (float)glfwGetTime();
 	float simYears = 0.0f;
-	const float SIM_SPEED = 0.05f;
+
+	// 현실 시간 1초당 시뮬레이션에서 1일이 지나도록 설정
+	// simYears는 "년" 단위이므로 1일 = 1/365년
+	const float SIM_SPEED = 1.0f / 365.0f;
 
 	// 루프 ---------------------------------------------------------
 	while (!glfwWindowShouldClose(window))
@@ -995,21 +1237,22 @@ int main()
 		// Simulation Speed Control
 		// Shift = speed up
 		// Ctrl  = slow down
+		// + 100x / - 100x
 		// ===========================
 		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
 			glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
 		{
 			simSpeedMultiplier += dt * 2.0f;
-			if (simSpeedMultiplier > 10.0f)
-				simSpeedMultiplier = 10.0f;
+			if (simSpeedMultiplier > 100.0f)
+				simSpeedMultiplier = 100.0f;
 		}
 
 		if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
 			glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)
 		{
 			simSpeedMultiplier -= dt * 2.0f;
-			if (simSpeedMultiplier < 0.5f)
-				simSpeedMultiplier = 0.5f;
+			if (simSpeedMultiplier < 0.1f)
+				simSpeedMultiplier = 0.1f;
 		}
 
 		// 행성 추적 ------------------------------------------------
@@ -1079,8 +1322,9 @@ int main()
 		sceneShader.setInt("isSun", 1);
 		sceneShader.setFloat("emissionStrength", 4.0f);
 
-		// 매 프레임 자전 업데이트
-		sun.advanceSpin(dt);
+		// 태양 자전 업데이트 (배속 + 일시정지 반영)
+		float dtSimDaysForSun = (isPaused ? 0.0f : dt * simSpeedMultiplier);
+		sun.advanceSpin(dtSimDaysForSun);
 
 		// 회전 포함된 태양 모델 행렬 생성
 		glm::mat4 sunModel = sun.buildModelMatrix(7.0f);
@@ -1100,7 +1344,7 @@ int main()
 		// 태양이 관리하는 행성 리스트 가져오기
 		auto& planets = sun.getPlanets();
 
-		planetWorldPositions.clear();                 
+		planetWorldPositions.clear();
 		planetWorldPositions.reserve(planets.size());
 
 		int pIdx = 0; // 행성 인덱스 카운터
@@ -1123,14 +1367,15 @@ int main()
 
 			// B. 물리 업데이트 및 위치 계산 (Helper 함수 사용)
 			// 이 함수 내부에서 recordTrail()도 호출됨
-			glm::vec3 planetWorldPos = updatePlanetPhysics(planet, simYears, SCALE_UNITS);
+			glm::vec3 planetWorldPos;
+			updatePlanetPhysics(planet, simYears, orbitToXZ, SCALE_UNITS, planetWorldPos);
 
 			// 행성 world 좌표를 저장
 			planetWorldPositions.push_back(planetWorldPos);
+
 			// ==========================================
 			// [추가] 카메라 추적 로직 (핵심!)
 			// ==========================================
-
 			if (trackingIndex == pIdx)
 			{
 				// 1. 현재 추적 모드가 꺼져있다면 -> 켜기
@@ -1144,8 +1389,26 @@ int main()
 
 			// C. 행성 렌더링
 			renderPlanet(planet, currentTex, sceneShader, sphereIndexCount, dt, SCALE_UNITS, planetWorldPos, sphereVAO);
+
+			// 고리 렌더 (Saturn / Jupiter 등)
+			if (planet.getParams().ring.enabled && planet.ring)
+			{
+				glm::mat4 planetModel =
+					planet.buildModelMatrix(SCALE_UNITS, planetWorldPos);
+
+				planet.ring->setShader(&ringShader);
+
+				// ★ 알파 블렌딩 켜기
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+				planet.ring->render(planetModel, view, proj);
+
+				// ★ 다시 끄기 (다른 렌더에 영향 X)
+				glDisable(GL_BLEND);
+			}
+
 			// 행성별 위성 렌더링
-			// (texTitan, texEuropa 등은 로드해서 변수로 넘겨주어야 함. 없으면 texMoon만 넣어도 됨)
 			renderSatellites(planet, sceneShader,
 				dt, simYears, SCALE_UNITS,
 				sphereVAO, sphereIndexCount,
@@ -1153,90 +1416,7 @@ int main()
 				texMoon,
 				texEuropa,
 				texTitan);
-			// 해성 이름이 "Saturn" 일시 고리 렌더링
-			if (pName == "Saturn") {
-				// 1. 투명도(Alpha Blending) 켜기
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-				// 2. 텍스처 바인딩 (고리)
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, texSaturnRing);
-				sceneShader.setInt("diffuseMap", 0);
-				sceneShader.setInt("isSun", 0); // 고리는 빛나지 않음
-				sceneShader.setFloat("emissionStrength", 1.0f);
-
-				// 3. 모델 행렬 계산 (위치 -> 회전 -> 크기)
-				glm::mat4 ringModel = glm::mat4(1.0f);
-
-				// (1) 위치: 토성 위치로 이동
-				ringModel = glm::translate(ringModel, planetWorldPos);
-
-				// (2) 회전: 고리를 눕히기 위해 X축 90도 회전
-				//     + 자전축 기울기(Axial Tilt)가 있다면 여기서 같이 적용
-				ringModel = glm::rotate(ringModel, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
-				// (3) 크기: 토성 본체보다 커야 함 (예: 1.5배 ~ 2.5배)
-				// 토성의 반지름을 가져와서 비례식으로 키움
-				float ringScale = planet.getParams().radiusRender * 2.2f;
-				ringModel = glm::scale(ringModel, glm::vec3(SCALE_UNITS * ringScale));
-
-				sceneShader.setMat4("model", ringModel);
-
-				// 4. 사각형(Quad) 그리기
-				// createQuad로 만든 quadVAO를 사용합니다.
-				glBindVertexArray(ringVAO);
-				glDrawArrays(GL_TRIANGLES, 0, 6);
-				glBindVertexArray(0);
-
-				// 5. 투명도 끄기 (다른 물체에 영향 안 주게)
-				glDisable(GL_BLEND);
-			}
-			// 천왕성 고리 추가
-			else if (pName == "Uranus")
-
-			{
-				// 1. 투명도 켜기
-				glEnable(GL_BLEND);
-				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-				// 2. 텍스처 바인딩 (천왕성 고리)
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D, texUranusRing); // 로드한 변수명
-				sceneShader.setInt("diffuseMap", 0);
-				sceneShader.setInt("isSun", 0);
-				sceneShader.setFloat("emissionStrength", 1.0f);
-
-				// 3. 모델 행렬 계산
-				glm::mat4 ringModel = glm::mat4(1.0f);
-
-				// (1) 위치: 천왕성 위치로 이동
-				ringModel = glm::translate(ringModel, planetWorldPos);
-				float tilt = planet.getParams().axialTiltDeg;
-				if (tilt != 0.0f) {
-					// Z축을 기준으로 98도 회전 (세로로 세움)
-					ringModel = glm::rotate(ringModel, glm::radians(tilt), glm::vec3(0.0f, 0.0f, 1.0f));
-				}
-				// (3) 기하 정렬 (X축 90도 회전)
-				// quadVAO는 기본적으로 '벽(XY평면)'처럼 서 있습니다.
-				// 이를 행성의 '적도면'에 맞추기 위해 90도 눕혀줍니다.
-				// (위에서 이미 축을 기울였으므로, '기울어진 적도'에 맞춰 눕게 됩니다)
-				ringModel = glm::rotate(ringModel, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
-				// (4) 크기: 천왕성 고리는 본체 대비 꽤 넓습니다.
-				float ringScale = planet.getParams().radiusRender * 2.0f;
-				ringModel = glm::scale(ringModel, glm::vec3(SCALE_UNITS * ringScale));
-
-				sceneShader.setMat4("model", ringModel);
-
-				// 4. 그리기 (ringVAO 사용)
-				// *주의: 토성 때 만든 ringVAO(createRingMesh로 만든 것)를 재사용합니다.
-				glBindVertexArray(ringVAO);
-				glDrawArrays(GL_TRIANGLES, 0, 6);
-				glBindVertexArray(0);
-
-				// 5. 투명도 끄기
-				glDisable(GL_BLEND);
-			}
 			// [추가] 루프 끝날 때 인덱스 증가
 			pIdx++;
 		}
@@ -1244,15 +1424,17 @@ int main()
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		// ================================
-		// 2) Bloom Blur (기존 코드 유지)
+		// 2) Bloom Blur
 		// ================================
 		bool horizontal = true;
 		bool first = true;
 		int passes = 10;
 
 		blurShader.use();
-		glBindVertexArray(quadVAO);
 		glDisable(GL_DEPTH_TEST);
+
+		// ★ 풀스크린 Quad VAO 바인딩
+		glBindVertexArray(quadVAO);
 
 		for (int i = 0; i < passes; ++i)
 		{
@@ -1271,6 +1453,7 @@ int main()
 			horizontal = !horizontal;
 			if (first) first = false;
 		}
+
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 		// ================================
@@ -1301,13 +1484,15 @@ int main()
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, pingColor[!horizontal]);
 		finalShader.setInt("bloomTex", 1);
-
 		finalShader.setFloat("exposure", 1.2f);
 
-		glBindVertexArray(quadVAO);
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_ONE, GL_ONE);
+
+		// 풀스크린 Quad VAO 바인딩
+		glBindVertexArray(quadVAO);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+
 		glDisable(GL_BLEND);
 
 		// ================================
@@ -1336,6 +1521,31 @@ int main()
 			}
 
 			planetIdx++;
+		}
+
+		// ==============================
+		// ★ 선택된 행성의 자전축 렌더링
+		// ==============================
+		if (trackingIndex >= 0)
+		{
+			auto& plist = sun.getPlanets();
+			if (trackingIndex < plist.size())
+			{
+				Planet& P = plist[trackingIndex];
+
+				// 1) 행성 위치 구하기 (이미 업데이트된 worldPos 저장되어 있어야 함)
+				glm::vec3 pos = planetWorldPositions[trackingIndex];
+
+				// 2) 행성의 자전축 방향 계산
+				float tilt = P.getParams().axialTiltDeg;
+				glm::vec3 axisDir = computeAxisDir(tilt);
+
+				// 3) 선 그리기
+				drawAxisLine(pos, axisDir,
+					axisShader,
+					cam.getViewMatrix(),
+					proj);
+			}
 		}
 
 		// ===========================
